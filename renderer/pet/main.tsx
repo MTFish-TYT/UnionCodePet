@@ -27,15 +27,18 @@ function PetApp() {
     return window.pet.onPetReady((info) => setPet(info));
   }, []);
 
-  // Subscribe to sessions + re-aggregate periodically (the 'done' cheer window
-  // expires on a timer, not a new event).
+  // Subscribe to sessions (push) + poll on a timer (pull, as a backstop in
+  // case the push subscription drops). The 'done' cheer window also expires on
+  // the timer without a new event.
   useEffect(() => {
-    const unsub = window.pet.onSessionsUpdate((sessions) => {
-      sessionsRef.current = sessions as SessionLike[];
-      setPhase(aggregatePhase(sessionsRef.current));
-    });
+    const recompute = (sessions: SessionLike[]): void => {
+      sessionsRef.current = sessions;
+      setPhase(aggregatePhase(sessions));
+    };
+    const unsub = window.pet.onSessionsUpdate((sessions) => recompute(sessions as SessionLike[]));
+    // Poll every 500ms — catches both the 'done' timeout AND any missed pushes.
     const iv = setInterval(() => {
-      setPhase(aggregatePhase(sessionsRef.current));
+      void window.pet.getSessions().then((s) => recompute(s as SessionLike[]));
     }, 500);
     return () => {
       unsub();

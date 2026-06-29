@@ -9,7 +9,7 @@
  *  - right-click context menu (toggle click-through / hide / config / quit)
  *  - click-through toggleable (default OFF so it's draggable)
  */
-import { BrowserWindow, Menu, shell, app, screen } from 'electron';
+import { BrowserWindow, Menu, shell, app, screen, ipcMain } from 'electron';
 import { join, dirname } from 'node:path';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -117,6 +117,15 @@ export function broadcastSessionsToPet(sessions: unknown[]): void {
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('sessions:update', sessions);
   }
+}
+
+/**
+ * Register the pet:get-sessions handler so the pet renderer can PULL sessions
+ * on demand (a backstop for the push subscription). Call once after the
+ * ingester exists.
+ */
+export function registerPetIpc(allSessions: () => unknown[]): void {
+  ipcMain.handle('pet:get-sessions', () => allSessions());
 }
 
 function toggleClickThrough(): void {

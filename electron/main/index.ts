@@ -11,7 +11,7 @@ import { loadConfig } from '../../src/config.js';
 import { CodexPoller } from '../../src/codex-poller.js';
 import { startHttpServer } from './http-server.js';
 import { registerIpc } from './ipc-handlers.js';
-import { createPetWindow, broadcastSessionsToPet } from './pet-window.js';
+import { createPetWindow, broadcastSessionsToPet, registerPetIpc } from './pet-window.js';
 
 // Project root (where pets/ lives). __dirname is out/main at runtime.
 const PROJECT_ROOT = join(__dirname, '..', '..');
@@ -64,6 +64,8 @@ app.whenReady().then(() => {
     }
     broadcastSessionsToPet(sessions);
   });
+  // Pet renderer can also PULL sessions on demand (backstop for the push).
+  registerPetIpc(ingester.allSessions);
 
   // 3. Codex sessions poller feeds the same ingester.
   poller = new CodexPoller(ingester.ingest, (m) => console.log(`[codex-poller] ${m}`));

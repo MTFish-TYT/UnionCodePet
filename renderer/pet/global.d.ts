@@ -10,6 +10,7 @@ interface PetInfo {
 export interface PetApi {
   onPetReady: (cb: (info: PetInfo) => void) => () => void;
   onSessionsUpdate: (cb: (sessions: unknown[]) => void) => () => void;
+  getSessions: () => Promise<unknown[]>;
   toggleClickThrough: () => void;
   hidePet: () => void;
   openConfig: () => void;

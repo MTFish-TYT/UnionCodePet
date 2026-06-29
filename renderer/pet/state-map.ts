@@ -15,8 +15,14 @@ interface SessionLike {
 // Priority order (first match wins). 'done' is special-cased by recency below.
 const PHASE_PRIORITY: GlobalPhase[] = ['waiting', 'error', 'working'];
 
-/** How long a 'done' phase keeps the pet cheering before reverting to idle. */
-const DONE_CHEER_MS = 4000;
+/**
+ * How long a 'done' phase keeps the pet cheering before reverting to idle.
+ * Generous because the event path has latency: Zcode's dispatcher POSTs via a
+ * PowerShell child process, which adds several seconds before the daemon (and
+ * thus the pet) sees the event. The cheer window must comfortably cover that
+ * delay or the pet never cheers at all.
+ */
+const DONE_CHEER_MS = 10000;
 
 /**
  * Aggregate sessions into one global phase.

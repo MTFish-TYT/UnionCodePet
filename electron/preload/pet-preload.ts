@@ -12,6 +12,10 @@ const api = {
     ipcRenderer.on('pet:ready', handler);
     return () => ipcRenderer.removeListener('pet:ready', handler);
   },
+  // Pull the current sessions on demand. More reliable than relying solely on
+  // the push subscription (which can drop if the preload listener misses the
+  // window). The pet polls this every 500ms as a backstop.
+  getSessions: () => ipcRenderer.invoke('pet:get-sessions'),
   // Live session list (same shape as the config window gets).
   onSessionsUpdate: (cb: (sessions: unknown[]) => void) => {
     const handler = (_e: unknown, sessions: unknown[]) => cb(sessions);
