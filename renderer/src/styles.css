@@ -418,3 +418,19 @@ code {
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 12px;
 }
+
+.warn-banner {
+  background: #e0af6822;
+  border: 1px solid var(--yellow);
+  color: var(--yellow);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.warn-banner:hover {
+  background: #e0af6833;
+}

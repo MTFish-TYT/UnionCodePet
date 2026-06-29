@@ -17,6 +17,7 @@ import {
   type RuntimeConfig,
 } from '../../src/config.js';
 import { SoundEngine } from '../../src/sound-engine.js';
+import { existsSync } from 'node:fs';
 
 // A throwaway sound engine just for preview (no log needed).
 const previewSound = new SoundEngine();
@@ -46,6 +47,19 @@ export function registerIpc(onConfigSaved?: (cfg: RuntimeConfig) => void): void 
     // Build a synthetic event so SoundEngine.playFor maps the key correctly.
     // Preview bypasses the sound-map: just play the given file directly.
     return previewSound.playFile(path);
+  });
+
+  // Validate that configured sound files still exist (they may be absolute
+  // paths that broke after moving/packaging). Returns the list of missing keys.
+  ipcMain.handle('sounds:validate', () => {
+    const cfg = loadConfig();
+    const missing: string[] = [];
+    for (const [key, val] of Object.entries(cfg.soundMap)) {
+      if (typeof val === 'string' && val.length > 0 && !existsSync(val)) {
+        missing.push(key);
+      }
+    }
+    return missing;
   });
 
   ipcMain.handle('sound:browse', (e) => {

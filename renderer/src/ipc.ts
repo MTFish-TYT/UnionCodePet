@@ -8,6 +8,7 @@ export interface UcpApi {
   resetConfig: () => Promise<RuntimeConfig>;
   previewSound: (path: string) => Promise<boolean>;
   browseSoundFile: () => Promise<string | null>;
+  validateSounds: () => Promise<string[]>;
   onSessionsUpdate: (cb: (sessions: SessionSnapshot[]) => void) => () => void;
   listPets: () => Promise<Array<{ id: string; displayName: string }>>;
 }

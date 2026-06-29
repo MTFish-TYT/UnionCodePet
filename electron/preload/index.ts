@@ -15,6 +15,7 @@ const api = {
   // sound (M3)
   previewSound: (path: string) => ipcRenderer.invoke('sound:preview', path),
   browseSoundFile: () => ipcRenderer.invoke('sound:browse'),
+  validateSounds: () => ipcRenderer.invoke('sounds:validate'),
 
   // sessions (M3) — main pushes updates; renderer subscribes.
   onSessionsUpdate: (cb: (sessions: unknown[]) => void) => {

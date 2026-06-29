@@ -21,6 +21,7 @@ export default function App() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [page, setPage] = useState<Page>('sound');
   const [err, setErr] = useState<string | null>(null);
+  const [missingSounds, setMissingSounds] = useState<string[]>([]);
 
   // Sessions are subscribed at the TOP LEVEL (not inside SessionPanel) so they
   // keep updating regardless of which page is shown — otherwise events that
@@ -32,7 +33,13 @@ export default function App() {
   useEffect(() => {
     ucp
       .getConfig()
-      .then(setConfig)
+      .then((c) => {
+        setConfig(c);
+        // Check for broken sound paths (e.g. after packaging/moving). Show a
+        // banner prompting the user to re-pick them on the sound page.
+        return ucp.validateSounds();
+      })
+      .then(setMissingSounds)
       .catch((e) => setErr(String(e)));
   }, []);
 
@@ -89,6 +96,12 @@ export default function App() {
       </aside>
 
       <main className="content">
+        {missingSounds.length > 0 && (
+          <div className="warn-banner" onClick={() => setPage('sound')}>
+            ⚠️ {missingSounds.length} 个音效文件路径无效（可能已移动或打包后失效），
+           点击前往音效页重新选择。
+          </div>
+        )}
         {page === 'sound' && <SoundMapEditor config={config} onSave={handleSave} />}
         {page === 'general' && <GeneralSettings config={config} onSave={handleSave} />}
         {page === 'sessions' && <SessionPanel sessions={sessions} />}
