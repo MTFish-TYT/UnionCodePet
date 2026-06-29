@@ -32,8 +32,29 @@ export default function PetCanvas({
   // would keep drawing the OLD image from its closure.
   const [imgVersion, setImgVersion] = useState(0);
 
-  const petState: PetState = phaseToPetState(status.phase);
-  const row = ANIMATION_ROWS[petState];
+  // The pet's "real" state from status. When idle, we spice things up by
+  // occasionally playing a random idle-buster animation (waving/jumping/review)
+  // so the pet feels alive instead of just breathing forever.
+  const baseState: PetState = phaseToPetState(status.phase);
+  const [activeState, setActiveState] = useState<PetState>('idle');
+  const idleLoopsRef = useRef(0); // idle loops counted before maybe doing a buster
+  const busterLoopsRef = useRef(0); // loops of the current buster played
+
+  // Whenever the status phase changes, sync the active state (non-idle states
+  // always follow status; idle resets the idle-loop counter).
+  useEffect(() => {
+    setActiveState(baseState);
+    idleLoopsRef.current = 0;
+    busterLoopsRef.current = 0;
+  }, [baseState]);
+
+  const row = ANIMATION_ROWS[activeState];
+
+  // Pick a random "idle buster" animation to break up the monotony.
+  const IDLE_BUSTERS: PetState[] = ['waving', 'jumping', 'review'];
+  function pickBuster(): PetState {
+    return IDLE_BUSTERS[Math.floor(Math.random() * IDLE_BUSTERS.length)];
+  }
 
   // Load the atlas image whenever the data URL changes (boot + pet swap).
   useEffect(() => {
@@ -64,7 +85,33 @@ export default function PetCanvas({
       const sy = row.row * CELL_H;
       ctx.clearRect(0, 0, CELL_W, CELL_H);
       ctx.drawImage(img, sx, sy, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
-      frameIdxRef.current = (fi + 1) % row.frames.length;
+      const next = (fi + 1) % row.frames.length;
+      frameIdxRef.current = next;
+
+      // End of a full loop: decide whether to keep looping or switch state.
+      if (next === 0) {
+        // Only do idle antics when the real status is idle.
+        if (baseState === 'idle') {
+          if (activeState === 'idle') {
+            idleLoopsRef.current += 1;
+            // After a few idle loops, ~25% chance to play a buster animation.
+            if (idleLoopsRef.current >= 2 && Math.random() < 0.25) {
+              setActiveState(pickBuster());
+              busterLoopsRef.current = 0;
+              return; // this effect's cleanup will restart with the new row
+            }
+          } else {
+            // Currently playing a buster — play 1-2 loops then return to idle.
+            busterLoopsRef.current += 1;
+            if (busterLoopsRef.current >= 2) {
+              setActiveState('idle');
+              idleLoopsRef.current = 0;
+              return;
+            }
+          }
+        }
+      }
+
       const dur = row.durations[fi] ?? 150;
       timerRef.current = setTimeout(drawFrame, dur);
     };

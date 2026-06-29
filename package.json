@@ -9,6 +9,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "dist:win": "electron-vite build && electron-builder --win",
+    "pack": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack.ps1",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web"

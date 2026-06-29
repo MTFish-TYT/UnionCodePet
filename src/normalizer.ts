@@ -200,6 +200,29 @@ export function normalizeZcode(
         summary: summarize(raw?.reason) || '需要确认',
         cwd,
       };
+    case 'PreToolUse': {
+      // Tool calls (Bash/Write/Edit/Read…) → working state. Mirrors what Codex
+      // surfaces via its session poller, so Zcode now shows "工作中" too.
+      const tool = raw?.toolName ?? 'tool';
+      const inputSummary = summarizeZcodeToolInput(tool, raw?.toolInput);
+      return {
+        ...base,
+        event: 'tool_call',
+        toolName: tool,
+        summary: inputSummary ? `${tool}: ${inputSummary}` : tool,
+        cwd,
+      };
+    }
+    case 'PostToolUse': {
+      const tool = raw?.toolName ?? 'tool';
+      return {
+        ...base,
+        event: 'tool_result',
+        toolName: tool,
+        summary: `${tool} 完成`,
+        cwd,
+      };
+    }
     default:
       return null;
   }
@@ -222,6 +245,18 @@ function extractZcodePlanText(toolInput: unknown): string {
   if (!toolInput || typeof toolInput !== 'object') return '';
   const plan = (toolInput as Record<string, unknown>).plan;
   return typeof plan === 'string' ? plan : '';
+}
+
+/** Short summary of a Zcode tool's input for the bubble (Bash command, file path…). */
+function summarizeZcodeToolInput(tool: string, toolInput: unknown): string {
+  if (!toolInput || typeof toolInput !== 'object') return '';
+  const obj = toolInput as Record<string, unknown>;
+  if (tool === 'Bash' || tool === 'shell_command') {
+    return typeof obj.command === 'string' ? summarize(obj.command, 80) : '';
+  }
+  // Most file tools put the path in file_path or path.
+  const fp = obj.file_path ?? obj.path;
+  return typeof fp === 'string' ? summarize(fp, 80) : '';
 }
 
 // ---------------------------------------------------------------------------
