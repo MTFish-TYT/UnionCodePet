@@ -1,0 +1,28 @@
+{
+  "name": "union-codepet",
+  "version": "0.1.0",
+  "description": "Unified CLI status monitor daemon for Claude Code / Codex / Zcode. The 'stronger Code-Notify' stage of the future desktop pet.",
+  "type": "module",
+  "main": "dist/daemon.js",
+  "bin": {
+    "union-codepet": "dist/daemon.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/daemon.js",
+    "dev": "tsc && node dist/daemon.js"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "zcode",
+    "desktop-pet",
+    "notify",
+    "hooks"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
