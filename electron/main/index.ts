@@ -72,21 +72,20 @@ function createWindow(): void {
  * purple dot so it works even with no pet assets.
  */
 function createTray(): void {
-  // Try the active pet's spritesheet as the icon (Electron resizes it).
-  let icon: Electron.NativeImage;
-  try {
-    const petsDir = join(PROJECT_ROOT, 'pets');
-    const cfg = loadConfig();
-    const petDir = cfg.activePet ? join(petsDir, cfg.activePet) : null;
-    const sheet = petDir ? join(petDir, 'spritesheet.webp') : null;
-    if (sheet && existsSync(sheet)) {
-      icon = nativeImage.createFromPath(sheet).resize({ width: 16, height: 16 });
-    } else {
-      throw new Error('no pet sheet');
+  // Use the bundled tray icon (a clear 32x32 png). We don't use the pet's
+  // spritesheet because it's a large grid that becomes an unreadable blob when
+  // shrunk to tray size.
+  let icon: Electron.NativeImage = makeDotIcon();
+  const iconPath = join(__dirname, '../../build/tray-icon.png');
+  const devIconPath = join(__dirname, '../../../build/tray-icon.png');
+  for (const p of [iconPath, devIconPath]) {
+    if (existsSync(p)) {
+      const img = nativeImage.createFromPath(p);
+      if (!img.isEmpty()) {
+        icon = img;
+        break;
+      }
     }
-  } catch {
-    // Fallback: a 16x16 purple dot generated from a tiny PNG.
-    icon = makeDotIcon();
   }
 
   tray = new Tray(icon);
