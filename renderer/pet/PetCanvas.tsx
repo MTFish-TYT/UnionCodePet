@@ -12,6 +12,7 @@ import {
 } from './animation-rows';
 import type { PetStatus } from './state-map';
 import { phaseToPetState } from './state-map';
+import type { HistoryEntry } from './global';
 
 export default function PetCanvas({
   spritesheetDataUrl,
@@ -128,8 +129,40 @@ export default function PetCanvas({
   const label = status.label || (status.phase === 'idle' ? '空闲' : '空闲');
   const showBubble = true;
 
+  // History panel (toggled by the 📜 button on the bubble).
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  async function toggleHistory(): Promise<void> {
+    if (showHistory) {
+      setShowHistory(false);
+      return;
+    }
+    const h = await window.pet.getHistory();
+    setHistory(h);
+    setShowHistory(true);
+  }
+
   return (
     <div className="pet-root">
+      {showHistory && (
+        <div className="pet-history" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <div className="pet-history-header">
+            <span>事件历史（{history.length}）</span>
+            <span className="pet-history-close" onClick={() => setShowHistory(false)}>✕</span>
+          </div>
+          <div className="pet-history-list">
+            {history.length === 0 && <div className="pet-history-empty">暂无事件</div>}
+            {history.map((h, i) => (
+              <div key={i} className="pet-history-row">
+                <span className="pet-history-time">{new Date(h.ts).toLocaleTimeString('zh-CN', { hour12: false })}</span>
+                <span className={`pet-history-src src-badge-${h.source}`}>{h.source}</span>
+                <span className="pet-history-text">{h.summary || h.event}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {showBubble && (
         <div
           className={`pet-bubble ${expanded ? 'pet-bubble-expanded' : ''}`}
@@ -138,6 +171,17 @@ export default function PetCanvas({
           onClick={() => setExpanded((v) => !v)}
         >
           <span className="pet-bubble-text">{label}</span>
+          {/* History panel toggle. */}
+          <span
+            className="pet-bubble-menu"
+            title="历史"
+            onClick={(e) => {
+              e.stopPropagation();
+              void toggleHistory();
+            }}
+          >
+            📜
+          </span>
           {/* Explicit menu button — avoids the click/dblclick conflict that
               made double-click unreliable. */}
           <span

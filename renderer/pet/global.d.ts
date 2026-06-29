@@ -7,10 +7,20 @@ interface PetInfo {
   displayName: string;
 }
 
+export interface HistoryEntry {
+  ts: number;
+  source: string;
+  event: string;
+  summary?: string;
+  toolName?: string;
+  sessionId: string;
+}
+
 export interface PetApi {
   onPetReady: (cb: (info: PetInfo) => void) => () => void;
   onSessionsUpdate: (cb: (sessions: unknown[]) => void) => () => void;
   getSessions: () => Promise<unknown[]>;
+  getHistory: () => Promise<HistoryEntry[]>;
   toggleClickThrough: () => void;
   hidePet: () => void;
   openConfig: () => void;

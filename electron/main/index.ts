@@ -136,6 +136,7 @@ app.whenReady().then(() => {
   });
   // Pet renderer can also PULL sessions on demand (backstop for the push).
   registerPetIpc(ingester.allSessions);
+  ipcMain.handle('pet:get-history', () => ingester.history());
 
   // 3. Codex sessions poller feeds the same ingester.
   poller = new CodexPoller(ingester.ingest, (m) => console.log(`[codex-poller] ${m}`));

@@ -15,13 +15,25 @@ import {
   normalizeZcode,
   normalizeCodexNotify,
 } from '../../src/normalizer.js';
-import type { UnifiedEvent, CliSource } from '../../src/protocol.js';
+import type { UnifiedEvent, CliSource, UnifiedEventKind } from '../../src/protocol.js';
+
+/** A single historical event entry (for the pet's history panel). */
+export interface HistoryEntry {
+  ts: number;
+  source: CliSource;
+  event: UnifiedEventKind;
+  summary?: string;
+  toolName?: string;
+  sessionId: string;
+}
 
 export interface Ingester {
   /** Feed a normalized event into the funnel. */
   ingest(ev: UnifiedEvent): void;
   /** Current session states (for the renderer / health check). */
   allSessions(): ReturnType<SessionTracker['all']>;
+  /** Recent event history (newest first), capped at 200 entries. */
+  history(): HistoryEntry[];
 }
 
 interface IncomingDispatch {
@@ -39,18 +51,32 @@ interface IncomingDispatch {
 export function createIngester(onSessionsChange: () => void): Ingester {
   const tracker = new SessionTracker();
   const sound = new SoundEngine((m) => console.log(`[sound] ${m}`));
+  // Ring buffer of recent events for the pet's history panel (newest first).
+  const HISTORY_MAX = 200;
+  const history: HistoryEntry[] = [];
 
   function ingest(ev: UnifiedEvent): void {
     tracker.apply(ev);
     if (tracker.shouldSound(ev)) {
       if (sound.playFor(ev)) tracker.markSounded(ev);
     }
+    // Record to history (newest first; drop oldest past the cap).
+    history.unshift({
+      ts: ev.ts,
+      source: ev.source,
+      event: ev.event,
+      summary: ev.summary,
+      toolName: ev.toolName,
+      sessionId: ev.sessionId,
+    });
+    if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
+
     const t = new Date().toISOString().slice(11, 23);
     console.log(`[${t}] ▶ ${ev.source}/${ev.event} ${ev.summary ?? ''}`);
     onSessionsChange();
   }
 
-  return { ingest, allSessions: () => tracker.all() };
+  return { ingest, allSessions: () => tracker.all(), history: () => history.slice() };
 }
 
 /** Turn an incoming dispatch into a normalized UnifiedEvent (or null). */

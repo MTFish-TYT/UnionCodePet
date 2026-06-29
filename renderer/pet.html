@@ -65,6 +65,81 @@
       .pet-bubble-expanded .pet-bubble-text {
         white-space: normal;
       }
+
+      /* ---- history panel ---- */
+      .pet-history {
+        background: rgba(20, 22, 36, 0.95);
+        border: 1px solid rgba(122, 162, 247, 0.3);
+        border-radius: 8px;
+        margin-bottom: 4px;
+        width: 320px;
+        max-height: 260px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        user-select: none;
+      }
+      .pet-history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #7aa2f7;
+        border-bottom: 1px solid rgba(122, 162, 247, 0.2);
+      }
+      .pet-history-close {
+        cursor: pointer;
+        opacity: 0.6;
+        padding: 0 4px;
+      }
+      .pet-history-close:hover {
+        opacity: 1;
+      }
+      .pet-history-list {
+        overflow-y: auto;
+        max-height: 220px;
+        padding: 4px 0;
+      }
+      .pet-history-empty {
+        padding: 16px;
+        text-align: center;
+        color: #565f89;
+        font-size: 12px;
+      }
+      .pet-history-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      }
+      .pet-history-time {
+        color: #565f89;
+        font-family: 'Cascadia Code', monospace;
+        flex-shrink: 0;
+        width: 56px;
+      }
+      .pet-history-src {
+        flex-shrink: 0;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      .src-badge-claude { background: #d19a6633; color: #e0af68; }
+      .src-badge-zcode { background: #7aa2f733; color: #7aa2f7; }
+      .src-badge-codex { background: #9ece6a33; color: #9ece6a; }
+      .pet-history-text {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #c0caf5;
+      }
     </style>
   </head>
   <body>

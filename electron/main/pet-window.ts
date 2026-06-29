@@ -92,8 +92,8 @@ export function createPetWindow(projectRoot: string, petId?: string): void {
   // window is taller than the sprite (300 vs 208) to leave room for the status
   // bubble above the pet; the extra area is transparent.
   const workArea = screen.getPrimaryDisplay().workArea;
-  const winW = 240;
-  const winH = 300;
+  const winW = 340;
+  const winH = 320;
   const margin = 24;
   const petX = workArea.x + workArea.width - winW - margin;
   const petY = workArea.y + workArea.height - winH - margin;
