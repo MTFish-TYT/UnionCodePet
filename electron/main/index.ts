@@ -53,7 +53,9 @@ app.whenReady().then(() => {
 
   // 2. HTTP server + ingester. onSessionsChange broadcasts to the renderer.
   const { server, ingester } = startHttpServer(() => {
-    mainWindow?.webContents.send('sessions:update', ingester.allSessions());
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('sessions:update', ingester.allSessions());
+    }
   });
 
   // 3. Codex sessions poller feeds the same ingester.

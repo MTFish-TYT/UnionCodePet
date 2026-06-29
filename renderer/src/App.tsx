@@ -2,7 +2,7 @@
 // persists changes via the preload bridge.
 import { useEffect, useState } from 'react';
 import type { RuntimeConfig } from '@shared/config';
-import { ucp } from './ipc';
+import { ucp, type SessionSnapshot } from './ipc';
 import SoundMapEditor from './components/SoundMapEditor';
 import GeneralSettings from './components/GeneralSettings';
 import SessionPanel from './components/SessionPanel';
@@ -21,6 +21,13 @@ export default function App() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [page, setPage] = useState<Page>('sound');
   const [err, setErr] = useState<string | null>(null);
+
+  // Sessions are subscribed at the TOP LEVEL (not inside SessionPanel) so they
+  // keep updating regardless of which page is shown — otherwise events that
+  // fire while you're on the sound page would be lost. SessionPanel just reads
+  // this prop.
+  const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
+  useEffect(() => ucp.onSessionsUpdate(setSessions), []);
 
   useEffect(() => {
     ucp
@@ -84,7 +91,7 @@ export default function App() {
       <main className="content">
         {page === 'sound' && <SoundMapEditor config={config} onSave={handleSave} />}
         {page === 'general' && <GeneralSettings config={config} onSave={handleSave} />}
-        {page === 'sessions' && <SessionPanel />}
+        {page === 'sessions' && <SessionPanel sessions={sessions} />}
         {page === 'pet' && <PetPlaceholder />}
       </main>
     </div>

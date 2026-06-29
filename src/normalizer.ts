@@ -24,6 +24,7 @@ export function summarize(text: unknown, max = 120): string {
 interface ClaudeHookPayload {
   hookEventName?: string;
   toolName?: string;
+  tool_name?: string; // snake_case variant on PermissionRequest
   tool_input?: unknown;
   notification_type?: string; // 'permission_prompt' | 'idle_prompt' on Notification
   [k: string]: unknown;
@@ -56,11 +57,34 @@ export function normalizeClaude(
       // permission_prompt = needs approval; idle_prompt = waiting for input.
       const ntype = raw?.notification_type ?? '';
       const tool = raw?.toolName;
+      // ExitPlanMode fires a Notification (it needs the user to confirm exiting
+      // plan mode) — treat that as plan_started, not a generic permission.
+      if (tool === 'ExitPlanMode') {
+        return {
+          ...base,
+          event: 'plan_started',
+          toolName: tool,
+          summary: '退出计划模式，开始执行',
+          cwd,
+        };
+      }
       return {
         ...base,
         event: 'permission_request',
         toolName: tool,
         summary: ntype === 'idle_prompt' ? '等待输入' : '需要确认',
+        cwd,
+      };
+    }
+    case 'PermissionRequest': {
+      // Claude Code's dedicated permission event (tool needs approval).
+      // Payload has tool_name (snake_case) + tool_input.
+      const tool = raw?.toolName ?? raw?.tool_name;
+      return {
+        ...base,
+        event: 'permission_request',
+        toolName: tool,
+        summary: tool ? `请求确认: ${tool}` : '请求确认',
         cwd,
       };
     }

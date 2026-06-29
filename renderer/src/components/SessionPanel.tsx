@@ -1,22 +1,15 @@
-// Live session panel — the React replacement for the old console-panel.
-// Subscribes to `sessions:update` pushed from the main process.
-import { useEffect, useState } from 'react';
-import { ucp, type SessionSnapshot } from '../ipc';
+// Live session panel — pure presentational component.
+// Sessions are subscribed at the App top level (so they update regardless of
+// which page is shown); this component just renders them.
+import type { SessionSnapshot } from '../ipc';
 import { SOURCE_LABEL, PHASE_LABEL, PHASE_COLOR, ageLabel } from '../labels';
 
-export default function SessionPanel() {
-  const [sessions, setSessions] = useState<SessionSnapshot[]>([]);
-
-  useEffect(() => {
-    const unsubscribe = ucp.onSessionsUpdate(setSessions);
-    return unsubscribe;
-  }, []);
-
+export default function SessionPanel({ sessions }: { sessions: SessionSnapshot[] }) {
   return (
     <div className="settings-page">
       <div className="editor-header">
         <h2>会话状态</h2>
-        <p className="muted">实时显示各 CLI 会话的当前状态。</p>
+        <p className="muted">实时显示各 CLI 会话的当前状态（在任意页面时都会持续更新）。</p>
       </div>
 
       {sessions.length === 0 ? (
