@@ -1,164 +1,158 @@
-# UnionCodePet
+# UnionCodePet 🐾
 
-统一 CLI 状态监控守护进程——把 Claude Code、Codex、Zcode 三家 AI Coding CLI 的状态收归一处，用统一的提示音和状态面板告诉你"哪个 CLI 在做什么、什么时候需要你、什么时候完成了"。
+统一 CLI 状态监控 + 桌面桌宠系统——把 Claude Code、Codex、Zcode 三家 AI Coding CLI 的状态收归一处，用一个桌面桌宠实时反映"谁在干什么"，并支持可视化配置。
 
-这是**未来桌面宠物（桌宠）的数据层**。当前阶段（MVP）是一个无 UI 的后台守护进程 + 控制台状态面板，相当于一个加强版的 [Code-Notify](https://github.com/mylee04/code-notify)。后续会套上 Electron 桌宠外壳，前端可直接复用本项目的归一化事件协议。
+从一个"统一提示音"守护进程，演进成完整的桌宠系统：数据采集 → 状态归一化 → 可视化配置 → 桌宠动画 → 历史回溯。
 
-## 为什么造这个
+## 功能总览
 
-同时开多个 CLI 时，你不知道哪个在等审批、哪个跑完了。现有方案要么各响各的（提示音散落在 3 个 ps1 里，难统一管理），要么只看状态不显示内容（如 [Clawd on Desk](https://github.com/rullerzhou-afk/clawd-on-desk)）。UnionCodePet 的核心设计是：
+### 桌宠（桌面悬浮）
+- **透明置顶悬浮窗**：经典桌宠形态，可拖动，常驻桌面
+- **状态驱动动画**：根据全局 CLI 状态切换动画（空闲呼吸 / 工作中 / 等待确认 / 完成欢呼 / 出错）
+- **idle 随机小动作**：空闲时偶尔挥手 / 跳跃 / 检视，让桌宠更生动
+- **状态气泡**：实时显示当前状态 + 具体内容（如 `Zcode：完成 - <回复摘要>`），单击展开看完整内容
+- **历史面板**：气泡 📜 按钮打开独立可滚动历史面板，查看最近 200 条事件（时间 / 来源 / 摘要）
+- **菜单**：气泡 ☰ 按钮弹菜单，显示运行中的 CLI 及状态
+- **多 pet 切换**：配置 UI 选择桌宠形象，热切换不用重启
+- **素材**：复用 Codex hatch-pet 生成的 sprite sheet（1536×1872，8列×9行）
 
-- **dispatcher 架构**：CLI 侧只负责"上报事件"，播放和状态展示全部由守护进程统一控制。一处配置，全局生效。
-- **统一事件协议**：三家 CLI 的各种事件归一化成同一个 schema，前端（未来的桌宠）只面向这一个协议写。
-- **双通道 Codex**：notify（完成信号）+ sessions 轮询（实时状态），解决 Windows 下 Codex 禁用 hooks 的问题。
+### 配置 UI（cc-switch 式图形界面）
+- **音效映射**：可视化配置每个 CLI 事件的提示音（选文件 / 试听 / 静默 / 自动保存）
+- **通用设置**：端口、Codex 轮询间隔、各事件限流值
+- **会话状态**：实时显示各 CLI 会话当前状态
+- **桌宠选择**：扫描 pets/ 目录，卡片式选择当前桌宠
+- **音效路径检测**：启动时检查音效文件是否存在，失效时提示重选
+
+### 系统
+- **后台常驻**：系统托盘 + 关窗隐藏（关闭配置窗口不退出，托盘菜单退出）
+- **可打包**：`npm run pack` 产出 win-unpacked（绕过 winCodeSign 的普通权限打包方案）
 
 ## 架构
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  守护进程 daemon.ts（常驻后台）                        │
-│  ├─ HTTP server :23333（接收所有上报事件）             │
-│  ├─ Codex sessions 轮询器（增量解析 jsonl）            │
-│  ├─ 事件归一化层（各家事件 → 统一 schema）             │
-│  ├─ 状态机（per session，idle/working/waiting/done）   │
-│  ├─ 提示音引擎（统一配置 → SoundPlayer）               │
-│  └─ 控制台状态面板（实时摘要打印）        ← MVP 阶段   │
+│  Electron main 进程                                  │
+│  ├─ HTTP server :23333（接收 CLI hook/notify 上报）   │
+│  ├─ Codex sessions 轮询器（增量解析 jsonl）           │
+│  ├─ 事件归一化层（各家事件 → 统一 schema）            │
+│  ├─ SessionTracker（状态机 + 限流 + 历史记录）        │
+│  ├─ SoundEngine（统一提示音）                         │
+│  ├─ Tray（系统托盘 + 常驻）                           │
+│  └─ IPC → 推送给两个窗口                              │
 └────▲──────────────────────────────────▲─────────────┘
-     │ HTTP POST {统一事件}               │ 文件轮询
-┌────┴──────────────┐           ┌────────┴──────────┐
-│  dispatcher.ps1   │           │ Codex             │
-│  (三家 CLI 共用)   │           │ sessions/*.jsonl  │
-└────▲──────────────┘           └───────────────────┘
-     │ 各 CLI 的 hook/notify 把事件交给 dispatcher
-  ┌──┴──┬───────┬─────────┐
-  │Claude│Zcode │Codex    │
-  │hook │hook  │notify   │
+     │ HTTP POST                          │ IPC
+┌────┴──────────────┐           ┌────────┴──────────────┐
+│  dispatcher.ps1   │           │  配置窗口（renderer）   │
+│  (三家 CLI 共用)   │           │  音效/通用/会话/桌宠页  │
+└────▲──────────────┘           └────────────────────────┘
+     │ 各 CLI 的 hook/notify          ┌────────────────────────┐
+  ┌──┴──┬───────┬─────────┐          │  桌宠窗口（renderer-pet）│
+  │Claude│Zcode │Codex    │          │  sprite 播放 + 气泡 + 历史│
+  │hook │hook  │notify   │          └────────────────────────┘
+  │     │      │+轮询    │
   └─────┴──────┴─────────┘
 ```
 
-## 统一事件协议
+## 各 CLI 能力对比
 
-所有来源归一化成同一个形状：
+| 能力 | Claude Code | Codex | Zcode |
+|---|---|---|---|
+| 任务完成 | ✅ Stop hook | ✅ notify + 轮询 | ✅ Stop hook |
+| 工作中（工具调用） | ✅ PreToolUse | ✅ sessions 轮询 | ✅ PreToolUse |
+| 请求确认/提问 | ✅ Notification | ❌ 不外发 | ✅ PermissionRequest |
+| 执行 plan | ✅ PermissionRequest | ❌ | ✅ PermissionRequest |
+| 实时状态/摘要 | ✅ | ✅（轮询） | ✅ |
+| 接入方式 | settings.json hook | config.toml notify + 自动轮询 | 本地插件 hook |
 
-```typescript
-interface UnifiedEvent {
-  source: 'claude' | 'zcode' | 'codex';
-  sessionId: string;
-  event: 'task_started' | 'message' | 'tool_call' | 'tool_result'
-       | 'permission_request' | 'plan_started' | 'task_complete' | 'error';
-  role?: 'user' | 'assistant' | 'tool';
-  summary?: string;   // ≤120 字摘要，面板显示用
-  toolName?: string;
-  cwd?: string;
-  ts: number;
-}
-```
-
-加新 CLI 只需写一个 adapter 把它的事件转成 `UnifiedEvent`。
+> Codex 的"请求确认/plan"是 Codex 本身的限制（Windows 禁 hooks，notify 不外发这些事件），不是 UnionCodePet 的问题。
 
 ## 快速开始
 
 ### 环境要求
-- Node.js 18+（开发用 24）
-- Windows（当前音效播放走 PowerShell `System.Media.SoundPlayer`；macOS/Linux 可跑但无声，未来用 Electron Web Audio 补）
+- Node.js 18+
+- Windows（音效播放走 PowerShell；macOS/Linux 可跑但无声）
+- Electron 镜像（国内）：`ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/`
 
-### 安装
+### 安装与开发
 
 ```powershell
 git clone https://github.com/MTFish-TYT/UnionCodePet.git
 cd UnionCodePet
 npm install
-npm run build
+npm run dev          # 开发模式（HMR）
 ```
-
-### 启动守护进程
-
-```powershell
-npm start
-# 或开发模式（编译+运行）
-npm run dev
-```
-
-启动后会看到控制台状态面板，并监听 `http://127.0.0.1:23333`。
 
 ### 接入 CLI
 
 按各家文档把 CLI 的 hook/notify 指向 dispatcher：
-
 - [Claude Code 接入](install/claude.md)
 - [Zcode 接入](install/zcode.md)
 - [Codex 接入](install/codex.md)
 
 ### 配置提示音
 
-所有音效统一在 [`src/config.ts`](src/config.ts) 的 `SOUND_MAP`。改完重启守护进程即可。
+所有音效统一在配置 UI 的"音效"页（数据存在 `~/.unioncodepet/config.json`）。改完即时生效。
 
-```typescript
-'claude:task_complete':      'D:\\AL\\VoicePal\\...\\connected.wav',
-'zcode:plan_started':        'D:\\AL\\VoicePal\\...\\Suisen_omake1_05.wav',
-'codex:task_complete':       'D:\\AL\\VoicePal\\...\\servergroup_assigned.wav',
+### 打包
+
+```powershell
+npm run pack         # 产出 release/win-unpacked/UnionCodePet.exe
 ```
 
-`null` 表示"面板显示但静默"（适合频繁的 tool_call）。
+> electron-builder 的 winCodeSign 在非管理员权限会失败（符号链接问题），`pack.ps1` 脚本绕过它，直接组装 win-unpacked。如需安装程序 + 自定义 exe 图标，用管理员权限跑一次 `npm run dist:win`（缓存好后普通权限也能用）。
 
-## 各 CLI 能力对比
+## 桌宠素材（hatch-pet）
 
-| 能力 | Claude Code | Zcode | Codex |
-|---|---|---|---|
-| 任务完成 | ✅ `Stop` hook | ✅ `Stop` hook | ✅ `notify` agent-turn-complete |
-| 询问/审批 | ✅ `Notification` permission_prompt | ✅ `PermissionRequest` | ❌ Codex 不外发 |
-| 退出 plan 执行 | ✅ `PreToolUse` ExitPlanMode | ✅ `PermissionRequest` ExitPlanMode | ❌ |
-| 实时状态/摘要 | ✅ `PreToolUse` tool_call | — | ✅ sessions 轮询 |
-| 接入方式 | settings.json hook | 本地插件 hook | config.toml notify + 自动轮询 |
+桌宠素材复用 Codex 的 hatch-pet 生成。在任意 CLI 里调用 hatch-pet skill 生成 pet，把产出的 `pet.json + spritesheet.webp` 复制到 `pets/<pet名>/`，重启后在配置 UI 的"桌宠"页选择。
+
+素材契约（播放器内置）：
+- 1536×1872，8列×9行，cell 192×208
+- 9 个动画状态：idle / running-right / running-left / waving / jumping / failed / waiting / running / review
+- 帧时长写死在 `renderer/pet/animation-rows.ts`（不在 pet.json 里）
 
 ## 项目结构
 
 ```
 UnionCodePet/
-├── src/
-│   ├── daemon.ts          # 主进程：HTTP server + 事件分发 + 启动 poller
-│   ├── protocol.ts        # 统一事件协议定义
-│   ├── normalizer.ts      # 各家事件 → UnifiedEvent
-│   ├── session-state.ts   # per-session 状态机 + 限流
-│   ├── sound-engine.ts    # 统一提示音播放
-│   ├── codex-poller.ts    # Codex sessions jsonl 增量轮询
-│   ├── console-panel.ts   # 控制台状态面板
-│   └── config.ts          # 端口/轮询间隔/音效映射（唯一配置入口）
-├── hooks/
-│   └── dispatcher.ps1     # 统一上报脚本（三家共用）
-├── install/
-│   ├── claude.md          # Claude Code 接入
-│   ├── zcode.md           # Zcode 接入
-│   └── codex.md           # Codex 接入
-└── package.json
+├── src/                        # 纯逻辑核心（main/renderer 共享）
+│   ├── protocol.ts             # 统一事件协议
+│   ├── normalizer.ts           # 各家事件 → UnifiedEvent
+│   ├── session-state.ts        # 状态机 + 限流
+│   ├── config.ts               # 外置 JSON 配置（~/.unioncodepet/）
+│   ├── sound-engine.ts         # 提示音播放
+│   └── codex-poller.ts         # Codex sessions jsonl 轮询
+├── electron/
+│   ├── main/                   # 主进程：HTTP/poller/ingest/tray/IPC
+│   └── preload/                # IPC 桥（config 窗口 + pet 窗口）
+├── renderer/                   # 配置 UI（React）
+│   ├── src/components/         # 音效/通用/会话/桌宠页
+│   └── pet/                    # 桌宠窗口（canvas 播放器 + 气泡 + 历史）
+├── pets/                       # 桌宠素材（从 codex 复制）
+├── build/                      # 图标资源
+├── hooks/dispatcher.ps1        # 三家 CLI 共用上报脚本
+├── install/                    # 各 CLI 接入文档
+└── scripts/pack.ps1            # 普通权限打包脚本
 ```
 
-## 限流（防刷屏）
+## 状态映射
 
-借鉴 Code-Notify，per session + per event kind 限流：
+daemon 的统一事件 → 桌宠动画：
 
-| 事件 | 冷却 |
-|---|---|
-| `task_complete` | 10s |
-| `permission_request` | 180s |
-| `plan_started` | 30s |
-| `tool_call`/`tool_result` | 10s |
-| `message` | 5s |
-
-在 [`src/config.ts`](src/config.ts) 的 `rateLimitsMs` 调整。
-
-## 路线图
-
-- [x] **MVP**：三家接入 + 统一提示音 + 控制台状态面板（当前）
-- [ ] 开机自启 + 进程 watchdog（守护进程挂了自动拉起）
-- [ ] Electron 桌宠外壳（透明置顶 + 角色 + 对话气泡）
-- [ ] 对话内容可视化（实时对话流，不只是摘要）
-- [ ] opencode 接入
+| CLI 事件 | 桌宠动画 | 气泡 |
+|---|---|---|
+| 空闲 | idle（呼吸）/ 随机小动作 | 空闲 |
+| 任务完成 | jumping（欢呼，10秒） | `<源>：完成 - <摘要>` |
+| 工作中（工具调用） | running | `<源>：工作中 [<工具>]` |
+| 请求确认/提问 | waiting | `<源>：等待确认` |
+| 执行 plan | waiting | `<源>：开始执行计划` |
+| 出错 | failed | `<源>：出错` |
 
 ## 致谢
 
-- [Code-Notify](https://github.com/mylee04/code-notify) —— notify/限流/Codex sessions 解析的参考
-- [Clawd on Desk](https://github.com/rullerzhou-afk/clawd-on-desk) —— 桌宠形态和 Codex 轮询延迟的参考
+- [Code-Notify](https://github.com/mylee04/code-notify) — notify/限流/Codex sessions 解析参考
+- [Clawd on Desk](https://github.com/rullerzhou-afk/clawd-on-desk) — 桌宠形态参考
+- [cc-switch](https://github.com/farion1231/cc-switch) — 配置 UI 参考
+- [hatch-pet](https://github.com/openai/skills/tree/main/skills/.curated/hatch-pet) — 桌宠素材契约
 
 ## License
 
