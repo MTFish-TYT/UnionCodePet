@@ -14,8 +14,12 @@ import { startHttpServer } from './http-server.js';
 import { registerIpc } from './ipc-handlers.js';
 import { createPetWindow, broadcastSessionsToPet, registerPetIpc, reloadPet, listPets } from './pet-window.js';
 
-// Project root (where pets/ lives). __dirname is out/main at runtime.
-const PROJECT_ROOT = join(__dirname, '..', '..');
+// Project root (where pets/ and build/ live).
+// Dev: out/main → two levels up is the project root.
+// Packaged: extraResources copies pets/ and build/ into process.resourcesPath.
+const PROJECT_ROOT = app.isPackaged
+  ? process.resourcesPath
+  : join(__dirname, '..', '..');
 
 let mainWindow: BrowserWindow | null = null;
 let poller: CodexPoller | null = null;
@@ -33,6 +37,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     title: 'UnionCodePet',
+    icon: join(PROJECT_ROOT, 'build', 'UnionCodePet.ico'),
     webPreferences: {
       // electron-vite emits preload as .mjs (root is "type":"module").
       preload: join(__dirname, '../preload/index.mjs'),
@@ -76,15 +81,11 @@ function createTray(): void {
   // spritesheet because it's a large grid that becomes an unreadable blob when
   // shrunk to tray size.
   let icon: Electron.NativeImage = makeDotIcon();
-  const iconPath = join(__dirname, '../../build/tray-icon.png');
-  const devIconPath = join(__dirname, '../../../build/tray-icon.png');
-  for (const p of [iconPath, devIconPath]) {
-    if (existsSync(p)) {
-      const img = nativeImage.createFromPath(p);
-      if (!img.isEmpty()) {
-        icon = img;
-        break;
-      }
+  const iconPath = join(PROJECT_ROOT, 'build', 'UnionCodePet-32x32.png');
+  if (existsSync(iconPath)) {
+    const img = nativeImage.createFromPath(iconPath);
+    if (!img.isEmpty()) {
+      icon = img;
     }
   }
 
