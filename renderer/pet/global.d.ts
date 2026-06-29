@@ -15,6 +15,7 @@ export interface PetApi {
   hidePet: () => void;
   openConfig: () => void;
   quitApp: () => void;
+  showMenu: () => void;
 }
 
 declare global {

@@ -16,6 +16,9 @@ import { fileURLToPath } from 'node:url';
 
 let petWindow: BrowserWindow | null = null;
 let clickThrough = false;
+// Latest session list, updated by broadcastSessionsToPet; read when the menu
+// pops so it shows which CLIs are active and their current state.
+let latestSessions: Array<{ source: string; sessionId: string; phase: string; lastSummary?: string; lastToolName?: string }> = [];
 
 interface PetInfo {
   /** Base64 data URL of the spritesheet — renderer can't use file:// (CSP). */
@@ -52,16 +55,19 @@ export function loadActivePet(projectRoot: string): PetInfo | null {
 /** Create the pet window and send it the active pet info on load. */
 export function createPetWindow(projectRoot: string): void {
   // Place the pet at the bottom-right of the primary screen's work area, with a
-  // small margin so it sits just inside the visible desktop (not under the
-  // taskbar). Fixed position makes it easy to find on each launch.
+  // Place the pet at the bottom-right of the primary screen's work area. The
+  // window is taller than the sprite (300 vs 208) to leave room for the status
+  // bubble above the pet; the extra area is transparent.
   const workArea = screen.getPrimaryDisplay().workArea;
+  const winW = 240;
+  const winH = 300;
   const margin = 24;
-  const petX = workArea.x + workArea.width - 192 - margin;
-  const petY = workArea.y + workArea.height - 208 - margin;
+  const petX = workArea.x + workArea.width - winW - margin;
+  const petY = workArea.y + workArea.height - winH - margin;
 
   petWindow = new BrowserWindow({
-    width: 192,
-    height: 208,
+    width: winW,
+    height: winH,
     x: petX,
     y: petY,
     frame: false,
@@ -78,24 +84,14 @@ export function createPetWindow(projectRoot: string): void {
     },
   });
 
-  // Right-click context menu.
-  petWindow.webContents.on('context-menu', () => {
-    const menu = Menu.buildFromTemplate([
-      { label: clickThrough ? '取消点击穿透' : '点击穿透（鼠标可穿过桌宠）', click: toggleClickThrough },
-      { label: '隐藏桌宠', click: () => petWindow?.hide() },
-      { type: 'separator' },
-      { label: '打开配置', click: () => petWindow?.webContents.send('pet:open-config') },
-      { type: 'separator' },
-      { label: '退出', click: () => app.quit() },
-    ]);
-    menu.popup();
-  });
-
   // IPC from the pet renderer (menu-triggered actions).
   petWindow.webContents.ipc.on('pet:toggle-clickthrough', toggleClickThrough);
   petWindow.webContents.ipc.on('pet:hide', () => petWindow?.hide());
   petWindow.webContents.ipc.on('pet:open-config', () => showConfigWindow());
   petWindow.webContents.ipc.on('pet:quit', () => app.quit());
+  // Double-click opens a dynamic menu (right-click is swallowed by the drag
+  // region on Windows, so double-click is the trigger instead).
+  petWindow.webContents.ipc.on('pet:show-menu', () => showPetMenu());
 
   // Load the pet renderer. On load, tell it which spritesheet to draw.
   petWindow.webContents.on('did-finish-load', () => {
@@ -114,9 +110,47 @@ export function createPetWindow(projectRoot: string): void {
 
 /** Push the current session list to the pet window (drives its animation). */
 export function broadcastSessionsToPet(sessions: unknown[]): void {
+  latestSessions = sessions as typeof latestSessions;
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('sessions:update', sessions);
   }
+}
+
+const PHASE_CN: Record<string, string> = {
+  idle: '空闲',
+  working: '工作中',
+  waiting: '等待确认',
+  done: '完成',
+  error: '出错',
+};
+
+/** Build + pop the pet menu (triggered by double-click). */
+function showPetMenu(): void {
+  const items: Electron.MenuItemConstructorOptions[] = [];
+
+  if (latestSessions.length > 0) {
+    items.push({ label: '运行中的 CLI', enabled: false });
+    for (const s of latestSessions) {
+      const src = s.source.charAt(0).toUpperCase() + s.source.slice(1);
+      const phase = PHASE_CN[s.phase] ?? s.phase;
+      const summary = s.lastSummary ? ` · ${s.lastSummary.slice(0, 30)}` : '';
+      // enabled:false → display-only (we don't focus windows, per the decision).
+      items.push({ label: `${src} · ${phase}${summary}`, enabled: false });
+    }
+    items.push({ type: 'separator' });
+  }
+
+  items.push(
+    { label: clickThrough ? '取消点击穿透' : '点击穿透（鼠标可穿过桌宠）', click: toggleClickThrough },
+    { label: '隐藏桌宠', click: () => petWindow?.hide() },
+    { type: 'separator' },
+    { label: '打开配置', click: () => showConfigWindow() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() },
+  );
+
+  const menu = Menu.buildFromTemplate(items);
+  menu.popup();
 }
 
 /**

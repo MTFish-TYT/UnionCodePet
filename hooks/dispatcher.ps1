@@ -81,16 +81,20 @@ if ($env:UCP_PAYLOAD) {
     # Fallback: direct -JsonPayload arg (quotes may be mangled, but keep it).
     $rawPayload = $JsonPayload
 } else {
-    # Claude/Zcode hook path: payload arrives via stdin. Try BOTH channels:
-    #  1) $input automatic variable — populated when PowerShell bound the piped
-    #     stdin as objects (the common case for hook invocation).
-    #  2) [Console]::In.ReadToEnd() — the raw stream, for non-piped callers.
+    # Claude/Zcode hook path: payload arrives via stdin. Read the raw byte
+    # stream as UTF-8 — NOT [Console]::In or $input, which decode under the
+    # console codepage (GBK/chcp 936 on Chinese Windows) and corrupt the
+    # Chinese bytes that Zcode writes as UTF-8. OpenStandardInput gives the
+    # raw bytes; wrapping it in a UTF-8 StreamReader decodes them correctly so
+    # the daemon's JSON.parse sees intact Chinese (responsePreview etc.).
     try {
-        $fromInput = @($input)            # force-enumerate; survives empty/null
-        if ($fromInput -and $fromInput.Count -gt 0) {
-            $rawPayload = ($fromInput | Out-String)
-        }
+        $stream = [Console]::OpenStandardInput()
+        $reader = New-Object System.IO.StreamReader($stream, [System.Text.UTF8Encoding]::new($false))
+        $rawPayload = $reader.ReadToEnd()
+        $reader.Close()
     } catch { }
+    # Fallback to the codepage-based reader only if the UTF-8 stream came back
+    # empty (some hook hosts pipe via $input instead of the raw stream).
     if ([string]::IsNullOrWhiteSpace($rawPayload)) {
         try { $rawPayload = [Console]::In.ReadToEnd() } catch { }
     }

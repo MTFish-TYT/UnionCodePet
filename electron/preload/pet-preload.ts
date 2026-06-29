@@ -27,6 +27,9 @@ const api = {
   hidePet: () => ipcRenderer.send('pet:hide'),
   openConfig: () => ipcRenderer.send('pet:open-config'),
   quitApp: () => ipcRenderer.send('pet:quit'),
+  // Double-click on the pet shows the menu (right-click is swallowed by the
+  // drag region on Windows, so we use double-click instead).
+  showMenu: () => ipcRenderer.send('pet:show-menu'),
 };
 
 export type PetApi = typeof api;

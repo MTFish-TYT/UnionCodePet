@@ -1,10 +1,8 @@
-// PetCanvas — the sprite-sheet animation player.
+// PetCanvas — the sprite-sheet animation player + status bubble.
 //
-// Loads the 1536×1872 atlas, slices it into 192×208 cells per the animation-rows
-// contract, and plays the row for the current pet state. Frame timing follows
-// each row's `durations` array (the contract is NOT in pet.json).
-//
-// The whole window is draggable via CSS -webkit-app-region on the canvas.
+// Renders the pet sprite (animated per the hatch-pet contract) and, above it,
+// a speech bubble showing the current status label (e.g. "Claude：等待确认").
+// The whole pet is draggable via CSS app-region; double-click opens the menu.
 import { useEffect, useRef, useState } from 'react';
 import {
   ANIMATION_ROWS,
@@ -12,15 +10,17 @@ import {
   CELL_H,
   type PetState,
 } from './animation-rows';
-import type { GlobalPhase } from './state-map';
+import type { PetStatus } from './state-map';
 import { phaseToPetState } from './state-map';
 
 export default function PetCanvas({
   spritesheetDataUrl,
-  phase,
+  status,
+  onDoubleClick,
 }: {
   spritesheetDataUrl: string;
-  phase: GlobalPhase;
+  status: PetStatus;
+  onDoubleClick: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -28,11 +28,11 @@ export default function PetCanvas({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [imgLoaded, setImgLoaded] = useState(false);
 
-  const petState: PetState = phaseToPetState(phase);
+  const petState: PetState = phaseToPetState(status.phase);
   const row = ANIMATION_ROWS[petState];
 
-  // Load the atlas image once. The src is a base64 data URL (main reads the
-  // webp and encodes it, because the renderer's CSP blocks file:// access).
+  // Load the atlas image once. Base64 data URL (main reads the webp, since the
+  // renderer's CSP blocks file://).
   useEffect(() => {
     const img = new Image();
     img.src = spritesheetDataUrl;
@@ -60,7 +60,6 @@ export default function PetCanvas({
       const sy = row.row * CELL_H;
       ctx.clearRect(0, 0, CELL_W, CELL_H);
       ctx.drawImage(img, sx, sy, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
-      // Advance + schedule next frame after this frame's duration.
       frameIdxRef.current = (fi + 1) % row.frames.length;
       const dur = row.durations[fi] ?? 150;
       timerRef.current = setTimeout(drawFrame, dur);
@@ -72,19 +71,42 @@ export default function PetCanvas({
     };
   }, [imgLoaded, row]);
 
+  // Bubble is always shown so the ☰ menu button is reachable at all times
+  // (even when idle). The label falls back to "空闲" when there's nothing else.
+  const [expanded, setExpanded] = useState(false);
+  const label = status.label || (status.phase === 'idle' ? '空闲' : '空闲');
+  const showBubble = true;
+
   return (
-    <canvas
-      ref={canvasRef}
-      width={CELL_W}
-      height={CELL_H}
-      style={
-        {
-          display: 'block',
-          // Transparent canvas: only the pet sprite shows, the rest of the
-          // window is see-through. Whole pet is draggable via app-region.
-          WebkitAppRegion: 'drag',
-        } as React.CSSProperties
-      }
-    />
+    <div className="pet-root">
+      {showBubble && (
+        <div
+          className={`pet-bubble ${expanded ? 'pet-bubble-expanded' : ''}`}
+          title={expanded ? '点击折叠' : label}
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <span className="pet-bubble-text">{label}</span>
+          {/* Explicit menu button — avoids the click/dblclick conflict that
+              made double-click unreliable. */}
+          <span
+            className="pet-bubble-menu"
+            title="打开菜单"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDoubleClick();
+            }}
+          >
+            ☰
+          </span>
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        width={CELL_W}
+        height={CELL_H}
+        style={{ display: 'block', WebkitAppRegion: 'drag' } as React.CSSProperties}
+      />
+    </div>
   );
 }

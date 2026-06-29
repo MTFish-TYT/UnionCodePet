@@ -1,49 +1,39 @@
-// Map the live session list → a single global phase → the pet animation row.
+// Map the live session list → a single global status (phase + bubble label).
 //
 // Aggregation picks the highest-priority phase across ALL CLI sessions (so the
-// one pet reflects "what's happening anywhere"). 'done' only wins briefly after
-// a task completes, then falls back to idle so the pet doesn't cheer forever.
+// one pet reflects "what's happening anywhere"). The label is what the speech
+// bubble shows — it includes the source + state + specific content when we
+// have it (responsePreview, question text, tool name).
 import type { PetState } from './animation-rows';
 
 export type GlobalPhase = 'idle' | 'working' | 'waiting' | 'done' | 'error';
 
-interface SessionLike {
+export interface PetStatus {
+  phase: GlobalPhase;
+  /** Text for the speech bubble; empty when phase is idle (bubble hidden). */
+  label: string;
+}
+
+export interface SessionLike {
+  source: string;
   phase: string;
+  lastSummary?: string;
+  lastEventKind?: string;
+  lastToolName?: string;
+  cwd?: string;
   updatedAt: number;
 }
 
-// Priority order (first match wins). 'done' is special-cased by recency below.
-const PHASE_PRIORITY: GlobalPhase[] = ['waiting', 'error', 'working'];
+const SOURCE_LABEL: Record<string, string> = {
+  claude: 'Claude',
+  zcode: 'Zcode',
+  codex: 'Codex',
+};
 
-/**
- * How long a 'done' phase keeps the pet cheering before reverting to idle.
- * Generous because the event path has latency: Zcode's dispatcher POSTs via a
- * PowerShell child process, which adds several seconds before the daemon (and
- * thus the pet) sees the event. The cheer window must comfortably cover that
- * delay or the pet never cheers at all.
- */
+/** How long a 'done' phase keeps the pet cheering before reverting to idle. */
 const DONE_CHEER_MS = 10000;
-
-/**
- * Aggregate sessions into one global phase.
- * @param now epoch ms (injected for testability)
- */
-export function aggregatePhase(sessions: SessionLike[], now = Date.now()): GlobalPhase {
-  if (sessions.length === 0) return 'idle';
-
-  // Highest-priority active phase (waiting > error > working).
-  for (const target of PHASE_PRIORITY) {
-    if (sessions.some((s) => s.phase === target)) return target;
-  }
-
-  // 'done' only counts if recent (within the cheer window).
-  const hasRecentDone = sessions.some(
-    (s) => s.phase === 'done' && now - s.updatedAt < DONE_CHEER_MS,
-  );
-  if (hasRecentDone) return 'done';
-
-  return 'idle';
-}
+/** How long a 'waiting'/'error' phase stays active before going stale. */
+const STALE_MS = 120000;
 
 /** Map a global phase onto the pet animation state. */
 export function phaseToPetState(phase: GlobalPhase): PetState {
@@ -60,4 +50,42 @@ export function phaseToPetState(phase: GlobalPhase): PetState {
     default:
       return 'idle';
   }
+}
+
+/**
+ * Aggregate sessions into one global status (phase + bubble label).
+ * @param now epoch ms (injected for testability)
+ */
+export function aggregateStatus(sessions: SessionLike[], now = Date.now()): PetStatus {
+  if (sessions.length === 0) return { phase: 'idle', label: '' };
+
+  const isFresh = (s: SessionLike): boolean => now - s.updatedAt < STALE_MS;
+  const labelFor = (s: SessionLike, stateText: string): string => {
+    const src = SOURCE_LABEL[s.source] ?? s.source;
+    const tool = s.lastToolName ? ` [${s.lastToolName}]` : '';
+    return `${src}：${stateText}${tool}`;
+  };
+
+  // Priority: waiting > error > working > (done) > idle.
+  const waiting = sessions.find((s) => s.phase === 'waiting' && isFresh(s));
+  if (waiting) {
+    // lastSummary carries the question/plan text when we have it.
+    const detail = waiting.lastSummary ? `（${waiting.lastSummary}）` : '';
+    return { phase: 'waiting', label: labelFor(waiting, '等待确认') + detail };
+  }
+
+  const errored = sessions.find((s) => s.phase === 'error' && isFresh(s));
+  if (errored) return { phase: 'error', label: labelFor(errored, '出错') };
+
+  const working = sessions.find((s) => s.phase === 'working');
+  if (working) return { phase: 'working', label: labelFor(working, '工作中') };
+
+  // 'done' only counts if recent (within the cheer window).
+  const done = sessions.find((s) => s.phase === 'done' && now - s.updatedAt < DONE_CHEER_MS);
+  if (done) {
+    const summary = done.lastSummary ? ` - ${done.lastSummary}` : '';
+    return { phase: 'done', label: labelFor(done, '完成') + summary };
+  }
+
+  return { phase: 'idle', label: '' };
 }
