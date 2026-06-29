@@ -1,16 +1,18 @@
 {
   "name": "union-codepet",
-  "version": "0.1.0",
-  "description": "Unified CLI status monitor daemon for Claude Code / Codex / Zcode. The 'stronger Code-Notify' stage of the future desktop pet.",
+  "version": "0.2.0",
+  "description": "Unified CLI status monitor + desktop pet config UI for Claude Code / Codex / Zcode.",
   "type": "module",
-  "main": "dist/daemon.js",
-  "bin": {
-    "union-codepet": "dist/daemon.js"
-  },
+  "main": "out/main/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/daemon.js",
-    "dev": "tsc && node dist/daemon.js"
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "//legacy-daemon": "old headless daemon entry, kept for reference",
+    "daemon": "tsc -p tsconfig.legacy.json && node dist-legacy/daemon.js"
   },
   "keywords": [
     "claude-code",
@@ -18,11 +20,20 @@
     "zcode",
     "desktop-pet",
     "notify",
-    "hooks"
+    "hooks",
+    "electron"
   ],
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.0"
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^33.0.0",
+    "electron-vite": "^2.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^5.4.0"
   }
 }

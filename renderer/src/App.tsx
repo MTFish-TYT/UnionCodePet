@@ -1,0 +1,92 @@
+// Main app shell — sidebar nav + content area. Loads config on boot and
+// persists changes via the preload bridge.
+import { useEffect, useState } from 'react';
+import type { RuntimeConfig } from '@shared/config';
+import { ucp } from './ipc';
+import SoundMapEditor from './components/SoundMapEditor';
+import GeneralSettings from './components/GeneralSettings';
+import SessionPanel from './components/SessionPanel';
+import PetPlaceholder from './components/PetPlaceholder';
+
+type Page = 'sound' | 'general' | 'sessions' | 'pet';
+
+const NAV: Array<{ id: Page; icon: string; label: string }> = [
+  { id: 'sound', icon: '🔊', label: '音效' },
+  { id: 'general', icon: '⚙️', label: '通用' },
+  { id: 'sessions', icon: '📊', label: '会话' },
+  { id: 'pet', icon: '🐾', label: '桌宠' },
+];
+
+export default function App() {
+  const [config, setConfig] = useState<RuntimeConfig | null>(null);
+  const [page, setPage] = useState<Page>('sound');
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    ucp
+      .getConfig()
+      .then(setConfig)
+      .catch((e) => setErr(String(e)));
+  }, []);
+
+  async function handleSave(cfg: RuntimeConfig): Promise<void> {
+    try {
+      const saved = await ucp.saveConfig(cfg);
+      setConfig(saved);
+    } catch (e) {
+      setErr(String(e));
+    }
+  }
+
+  async function handleReset(): Promise<void> {
+    const cfg = await ucp.resetConfig();
+    setConfig(cfg);
+  }
+
+  if (err) {
+    return (
+      <div className="app">
+        <div className="error-box">配置加载失败：{err}</div>
+      </div>
+    );
+  }
+  if (!config) {
+    return (
+      <div className="app">
+        <div className="loading">加载中…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <div className="sidebar-title">🐾 UnionCodePet</div>
+        <nav>
+          {NAV.map((n) => (
+            <button
+              key={n.id}
+              className={`nav-item ${page === n.id ? 'active' : ''}`}
+              onClick={() => setPage(n.id)}
+            >
+              <span className="nav-icon">{n.icon}</span>
+              <span>{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        {page === 'sound' && (
+          <button className="btn-link nav-reset" onClick={handleReset}>
+            恢复默认
+          </button>
+        )}
+      </aside>
+
+      <main className="content">
+        {page === 'sound' && <SoundMapEditor config={config} onSave={handleSave} />}
+        {page === 'general' && <GeneralSettings config={config} onSave={handleSave} />}
+        {page === 'sessions' && <SessionPanel />}
+        {page === 'pet' && <PetPlaceholder />}
+      </main>
+    </div>
+  );
+}

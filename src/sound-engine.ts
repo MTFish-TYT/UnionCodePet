@@ -24,11 +24,19 @@ export class SoundEngine {
     const path = SOUND_MAP[key];
     if (path === null) return false; // explicitly silent
     if (!path) return false; // unmapped → silent
+    return this.playFile(path, key);
+  }
+
+  /**
+   * Play a specific file directly (used by the config UI's preview button).
+   * Bypasses the sound map. Returns true if it actually played.
+   */
+  playFile(path: string, key?: string): boolean {
     if (!existsSync(path)) {
-      this.log(`[sound] missing file for ${key}: ${path}`);
+      this.log(`[sound] missing file${key ? ` for ${key}` : ''}: ${path}`);
       return false;
     }
-    this.log(`[sound] ▶ playing ${key} -> ${path}`);
+    if (key) this.log(`[sound] ▶ playing ${key} -> ${path}`);
     this.playWav(path);
     return true;
   }
