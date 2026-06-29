@@ -6,7 +6,7 @@ import { ucp, type SessionSnapshot } from './ipc';
 import SoundMapEditor from './components/SoundMapEditor';
 import GeneralSettings from './components/GeneralSettings';
 import SessionPanel from './components/SessionPanel';
-import PetPlaceholder from './components/PetPlaceholder';
+import PetSettings from './components/PetSettings';
 
 type Page = 'sound' | 'general' | 'sessions' | 'pet';
 
@@ -92,7 +92,7 @@ export default function App() {
         {page === 'sound' && <SoundMapEditor config={config} onSave={handleSave} />}
         {page === 'general' && <GeneralSettings config={config} onSave={handleSave} />}
         {page === 'sessions' && <SessionPanel sessions={sessions} />}
-        {page === 'pet' && <PetPlaceholder />}
+        {page === 'pet' && <PetSettings config={config} onSave={handleSave} />}
       </main>
     </div>
   );

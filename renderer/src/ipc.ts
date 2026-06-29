@@ -9,6 +9,7 @@ export interface UcpApi {
   previewSound: (path: string) => Promise<boolean>;
   browseSoundFile: () => Promise<string | null>;
   onSessionsUpdate: (cb: (sessions: SessionSnapshot[]) => void) => () => void;
+  listPets: () => Promise<Array<{ id: string; displayName: string }>>;
 }
 
 // Session shape pushed from main (mirrors src/session-state SessionState, but

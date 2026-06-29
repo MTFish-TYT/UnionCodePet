@@ -41,6 +41,8 @@ export interface RuntimeConfig {
   };
   rateLimitsMs: Record<UnifiedEventKind, number>;
   soundMap: Partial<Record<SoundKey, string | null>>;
+  /** Active pet id (matches a pet's `id` in pets/<id>/pet.json). '' = first found. */
+  activePet: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +80,7 @@ function defaultConfig(): RuntimeConfig {
     daemon: { port: 23333, host: '127.0.0.1', codexPollIntervalMs: 1500 },
     rateLimitsMs: { ...DEFAULT_RATE_LIMITS },
     soundMap: { ...DEFAULT_SOUND_MAP },
+    activePet: '', // '' = use the first pet found in pets/
   };
 }
 
@@ -171,6 +174,7 @@ function mergeWithDefaults(parsed: Partial<RuntimeConfig>): RuntimeConfig {
     },
     rateLimitsMs: { ...def.rateLimitsMs, ...(parsed.rateLimitsMs ?? {}) },
     soundMap: { ...def.soundMap, ...(parsed.soundMap ?? {}) },
+    activePet: parsed.activePet ?? def.activePet,
   };
 }
 

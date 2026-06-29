@@ -21,7 +21,7 @@ import { SoundEngine } from '../../src/sound-engine.js';
 // A throwaway sound engine just for preview (no log needed).
 const previewSound = new SoundEngine();
 
-export function registerIpc(): void {
+export function registerIpc(onConfigSaved?: (cfg: RuntimeConfig) => void): void {
   // ---- config ----
   ipcMain.handle('config:get', () => {
     // Return the current in-memory config (re-reads file so it's fresh).
@@ -30,7 +30,10 @@ export function registerIpc(): void {
 
   ipcMain.handle('config:save', (_e, cfg: RuntimeConfig) => {
     saveConfig(cfg);
-    return loadConfig();
+    const fresh = loadConfig();
+    // Notify (e.g. so the pet window can hot-swap when activePet changed).
+    onConfigSaved?.(fresh);
+    return fresh;
   });
 
   ipcMain.handle('config:reset', () => {

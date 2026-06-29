@@ -34,6 +34,14 @@ const SOURCE_LABEL: Record<string, string> = {
 const DONE_CHEER_MS = 10000;
 /** How long a 'waiting'/'error' phase stays active before going stale. */
 const STALE_MS = 120000;
+/**
+ * How long a 'working' phase stays active before going stale. Shorter than
+ * waiting/error because working sessions should keep emitting tool_call /
+ * tool_result events — if none arrive for this long, the task has likely
+ * finished (or stalled) without a Stop, and the pet should drop back to idle
+ * instead of pretending to work forever.
+ */
+const WORKING_STALE_MS = 60000;
 
 /** Map a global phase onto the pet animation state. */
 export function phaseToPetState(phase: GlobalPhase): PetState {
@@ -77,7 +85,7 @@ export function aggregateStatus(sessions: SessionLike[], now = Date.now()): PetS
   const errored = sessions.find((s) => s.phase === 'error' && isFresh(s));
   if (errored) return { phase: 'error', label: labelFor(errored, '出错') };
 
-  const working = sessions.find((s) => s.phase === 'working');
+  const working = sessions.find((s) => s.phase === 'working' && now - s.updatedAt < WORKING_STALE_MS);
   if (working) return { phase: 'working', label: labelFor(working, '工作中') };
 
   // 'done' only counts if recent (within the cheer window).

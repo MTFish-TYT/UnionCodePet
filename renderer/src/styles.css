@@ -369,3 +369,52 @@ input,
 .row-path {
   user-select: text;
 }
+
+/* ---- pet selection ---- */
+.pet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pet-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+  transition: all 0.12s;
+}
+
+.pet-card:hover {
+  border-color: var(--accent);
+  background: var(--row-hover);
+}
+
+.pet-card-active {
+  border-color: var(--green);
+  background: #2d3a2e;
+}
+
+.pet-card-name {
+  font-weight: 500;
+}
+
+.pet-card-check {
+  color: var(--green);
+  font-size: 12px;
+}
+
+code {
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+}

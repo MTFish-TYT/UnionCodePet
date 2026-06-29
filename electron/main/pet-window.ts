@@ -21,39 +21,72 @@ let clickThrough = false;
 let latestSessions: Array<{ source: string; sessionId: string; phase: string; lastSummary?: string; lastToolName?: string }> = [];
 
 interface PetInfo {
+  id: string;
   /** Base64 data URL of the spritesheet — renderer can't use file:// (CSP). */
   spritesheetDataUrl: string;
   displayName: string;
 }
 
-/** Find the first pet under <projectRoot>/pets/ and return its info. */
-export function loadActivePet(projectRoot: string): PetInfo | null {
+/** A pet's metadata for the selection UI (no spritesheet bytes). */
+export interface PetMeta {
+  id: string;
+  displayName: string;
+}
+
+/** Enumerate all pets under <projectRoot>/pets/ for the selection dropdown. */
+export function listPets(projectRoot: string): PetMeta[] {
   const petsDir = join(projectRoot, 'pets');
-  if (!existsSync(petsDir)) return null;
+  if (!existsSync(petsDir)) return [];
+  const out: PetMeta[] = [];
   for (const name of readdirSync(petsDir, { withFileTypes: true })) {
     if (!name.isDirectory()) continue;
     const petJsonPath = join(petsDir, name.name, 'pet.json');
     if (!existsSync(petJsonPath)) continue;
     try {
       const meta = JSON.parse(readFileSync(petJsonPath, 'utf-8'));
-      const spritesheetPath = join(petsDir, name.name, meta.spritesheetPath ?? 'spritesheet.webp');
-      if (existsSync(spritesheetPath)) {
-        // Read as base64 data URL — the renderer's strict CSP blocks file://,
-        // and a data URL needs no protocol registration.
-        const buf = readFileSync(spritesheetPath);
-        const ext = spritesheetPath.toLowerCase().endsWith('.png') ? 'png' : 'webp';
-        const spritesheetDataUrl = `data:image/${ext};base64,${buf.toString('base64')}`;
-        return { spritesheetDataUrl, displayName: meta.displayName ?? name.name };
-      }
+      out.push({ id: meta.id ?? name.name, displayName: meta.displayName ?? name.name });
     } catch {
       // skip malformed pet
     }
   }
-  return null;
+  return out;
+}
+
+/**
+ * Load a pet's info (spritesheet as a base64 data URL).
+ * @param petId if provided and matches a pet's id, use it; otherwise the first found.
+ */
+export function loadActivePet(projectRoot: string, petId?: string): PetInfo | null {
+  const petsDir = join(projectRoot, 'pets');
+  if (!existsSync(petsDir)) return null;
+  let fallback: PetInfo | null = null;
+  for (const name of readdirSync(petsDir, { withFileTypes: true })) {
+    if (!name.isDirectory()) continue;
+    const petJsonPath = join(petsDir, name.name, 'pet.json');
+    if (!existsSync(petJsonPath)) continue;
+    try {
+      const meta = JSON.parse(readFileSync(petJsonPath, 'utf-8'));
+      const id = meta.id ?? name.name;
+      const spritesheetPath = join(petsDir, name.name, meta.spritesheetPath ?? 'spritesheet.webp');
+      if (!existsSync(spritesheetPath)) continue;
+      const buf = readFileSync(spritesheetPath);
+      const ext = spritesheetPath.toLowerCase().endsWith('.png') ? 'png' : 'webp';
+      const info: PetInfo = {
+        id,
+        spritesheetDataUrl: `data:image/${ext};base64,${buf.toString('base64')}`,
+        displayName: meta.displayName ?? name.name,
+      };
+      if (petId && id === petId) return info; // exact match wins
+      if (!fallback) fallback = info; // remember first as fallback
+    } catch {
+      // skip malformed pet
+    }
+  }
+  return fallback;
 }
 
 /** Create the pet window and send it the active pet info on load. */
-export function createPetWindow(projectRoot: string): void {
+export function createPetWindow(projectRoot: string, petId?: string): void {
   // Place the pet at the bottom-right of the primary screen's work area, with a
   // Place the pet at the bottom-right of the primary screen's work area. The
   // window is taller than the sprite (300 vs 208) to leave room for the status
@@ -95,7 +128,7 @@ export function createPetWindow(projectRoot: string): void {
 
   // Load the pet renderer. On load, tell it which spritesheet to draw.
   petWindow.webContents.on('did-finish-load', () => {
-    const pet = loadActivePet(projectRoot);
+    const pet = loadActivePet(projectRoot, petId);
     if (pet) petWindow?.webContents.send('pet:ready', pet);
   });
 
@@ -114,6 +147,16 @@ export function broadcastSessionsToPet(sessions: unknown[]): void {
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('sessions:update', sessions);
   }
+}
+
+/**
+ * Hot-swap the active pet without restarting. Called after config:save when the
+ * user picks a different pet in the config UI.
+ */
+export function reloadPet(projectRoot: string, petId?: string): void {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  const pet = loadActivePet(projectRoot, petId);
+  if (pet) petWindow.webContents.send('pet:ready', pet);
 }
 
 const PHASE_CN: Record<string, string> = {

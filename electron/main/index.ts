@@ -5,13 +5,13 @@
  * All CLI events converge on the ingester (see ingest.ts); session changes are
  * pushed to the renderer via IPC `sessions:update`.
  */
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { join } from 'node:path';
 import { loadConfig } from '../../src/config.js';
 import { CodexPoller } from '../../src/codex-poller.js';
 import { startHttpServer } from './http-server.js';
 import { registerIpc } from './ipc-handlers.js';
-import { createPetWindow, broadcastSessionsToPet, registerPetIpc } from './pet-window.js';
+import { createPetWindow, broadcastSessionsToPet, registerPetIpc, reloadPet, listPets } from './pet-window.js';
 
 // Project root (where pets/ lives). __dirname is out/main at runtime.
 const PROJECT_ROOT = join(__dirname, '..', '..');
@@ -71,12 +71,14 @@ app.whenReady().then(() => {
   poller = new CodexPoller(ingester.ingest, (m) => console.log(`[codex-poller] ${m}`));
   poller.start();
 
-  // 4. IPC handlers (config read/save/preview — wired in M3).
-  registerIpc();
+  // 4. IPC handlers. On config save, hot-swap the pet if activePet changed.
+  // pets:list lets the config UI enumerate available pets.
+  registerIpc((cfg) => reloadPet(PROJECT_ROOT, cfg.activePet || undefined));
+  ipcMain.handle('pets:list', () => listPets(PROJECT_ROOT));
 
-  // 5. Config window + pet window.
+  // 5. Config window + pet window (with the configured active pet).
   createWindow();
-  createPetWindow(PROJECT_ROOT);
+  createPetWindow(PROJECT_ROOT, loadConfig().activePet || undefined);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

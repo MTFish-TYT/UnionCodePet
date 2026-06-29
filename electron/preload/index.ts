@@ -22,6 +22,9 @@ const api = {
     ipcRenderer.on('sessions:update', handler);
     return () => ipcRenderer.removeListener('sessions:update', handler);
   },
+
+  // pets — enumerate available pets for the selection dropdown.
+  listPets: () => ipcRenderer.invoke('pets:list'),
 };
 
 export type UcpApi = typeof api;
