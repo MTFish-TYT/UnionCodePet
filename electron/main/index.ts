@@ -11,6 +11,10 @@ import { loadConfig } from '../../src/config.js';
 import { CodexPoller } from '../../src/codex-poller.js';
 import { startHttpServer } from './http-server.js';
 import { registerIpc } from './ipc-handlers.js';
+import { createPetWindow, broadcastSessionsToPet } from './pet-window.js';
+
+// Project root (where pets/ lives). __dirname is out/main at runtime.
+const PROJECT_ROOT = join(__dirname, '..', '..');
 
 let mainWindow: BrowserWindow | null = null;
 let poller: CodexPoller | null = null;
@@ -51,11 +55,14 @@ app.whenReady().then(() => {
   // 1. Load (or create) external config → mutates the runtime CONFIG/SOUND_MAP.
   loadConfig();
 
-  // 2. HTTP server + ingester. onSessionsChange broadcasts to the renderer.
+  // 2. HTTP server + ingester. onSessionsChange broadcasts to BOTH the config
+  // window and the pet window (both drive off the same session list).
   const { server, ingester } = startHttpServer(() => {
+    const sessions = ingester.allSessions();
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('sessions:update', ingester.allSessions());
+      mainWindow.webContents.send('sessions:update', sessions);
     }
+    broadcastSessionsToPet(sessions);
   });
 
   // 3. Codex sessions poller feeds the same ingester.
@@ -65,8 +72,9 @@ app.whenReady().then(() => {
   // 4. IPC handlers (config read/save/preview — wired in M3).
   registerIpc();
 
-  // 5. Window.
+  // 5. Config window + pet window.
   createWindow();
+  createPetWindow(PROJECT_ROOT);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
