@@ -25,7 +25,8 @@ function createWindow(): void {
     autoHideMenuBar: true,
     title: 'UnionCodePet',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      // electron-vite emits preload as .mjs (root is "type":"module").
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
