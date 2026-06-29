@@ -40,6 +40,18 @@ param(
 # while still letting us read $input.
 $ErrorActionPreference = 'SilentlyContinue'
 
+# Force UTF-8 for stdin/stdout. PowerShell 5.1 defaults to the system codepage
+# (GBK on Chinese Windows, chcp 936). This helps keep ASCII fields clean; note
+# that Chinese text in Zcode payloads may still arrive corrupted, in which case
+# the daemon's regex fallback (see daemon.ts parsePayload) recovers the ASCII
+# state fields so sound + status still work — the panel summary just shows the
+# generic label instead of the dynamic Chinese text.
+try {
+    [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+} catch { }
+
 # --- Resolve -Source from $args if param binding dropped it ----------------
 # When stdin is piped, positional param binding can be skipped/interfered with.
 # Claude/Zcode always pass -Source explicitly, so this is a belt-and-suspenders.
