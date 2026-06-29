@@ -50,42 +50,58 @@ if (-not $Source -and $args) {
 }
 if (-not $Source) { $Source = 'claude' }
 
-# --- Gather payload -------------------------------------------------------
-$payload = $null
+# --- Gather payload (ALWAYS keep it as a raw string) ----------------------
+# We deliberately do NOT ConvertFrom-Json here. Re-parsing + ConvertTo-Json of
+# a nested PSCustomObject silently corrupts the shape on some PowerShell builds
+# (props dropped, payload becomes null), which is exactly why Codex events
+# never reached the daemon. Instead we forward the raw JSON string and let the
+# daemon's JSON.parse be the single source of truth.
 
-if ($JsonPayload) {
-    # Codex notify path: payload already in hand.
-    try { $payload = $JsonPayload | ConvertFrom-Json } catch { }
+$rawPayload = $null
+$sessionId = $null
+
+# Prefer the UCP_PAYLOAD env var (set by notify.ps1) over the -JsonPayload arg:
+# passing JSON via argv mangles embedded quotes in PowerShell's command-line
+# parsing, corrupting the payload. The env var round-trips the raw bytes intact.
+if ($env:UCP_PAYLOAD) {
+    $rawPayload = $env:UCP_PAYLOAD
+} elseif ($JsonPayload) {
+    # Fallback: direct -JsonPayload arg (quotes may be mangled, but keep it).
+    $rawPayload = $JsonPayload
 } else {
     # Claude/Zcode hook path: payload arrives via stdin. Try BOTH channels:
     #  1) $input automatic variable — populated when PowerShell bound the piped
     #     stdin as objects (the common case for hook invocation).
     #  2) [Console]::In.ReadToEnd() — the raw stream, for non-piped callers.
-    $raw = ''
     try {
         $fromInput = @($input)            # force-enumerate; survives empty/null
         if ($fromInput -and $fromInput.Count -gt 0) {
-            $raw = ($fromInput | Out-String)
+            $rawPayload = ($fromInput | Out-String)
         }
     } catch { }
-    if ([string]::IsNullOrWhiteSpace($raw)) {
-        try { $raw = [Console]::In.ReadToEnd() } catch { }
-    }
-    if ($raw) {
-        try { $payload = $raw | ConvertFrom-Json } catch { }
+    if ([string]::IsNullOrWhiteSpace($rawPayload)) {
+        try { $rawPayload = [Console]::In.ReadToEnd() } catch { }
     }
 }
 
+# Mine sessionId out of the raw JSON with a cheap regex (no full parse needed).
+if ($rawPayload -match '"sessionId"\s*:\s*"([^"]*)"') { $sessionId = $Matches[1] }
+elseif ($rawPayload -match '"thread-id"\s*:\s*"([^"]*)"') { $sessionId = $Matches[1] }
+
 # --- Build the envelope ---------------------------------------------------
+# Send payload as a STRING (the raw JSON text), NOT a nested object. Two reasons:
+#  1) Hand-concatenating JSON in PowerShell mangles embedded quotes (the payload
+#     quotes get eaten), producing invalid JSON that the daemon rejects with 400.
+#  2) ConvertTo-Json of a nested PSCustomObject corrupts the shape on some builds.
+# A flat hashtable where `payload` is a plain string serializes reliably, and the
+# daemon's parsePayload() already handles string-form JSON (it JSON.parses again).
 $envelope = [ordered]@{
     source    = $Source
     kind      = $Kind
-    payload   = $payload
-    sessionId = if ($payload.sessionId) { $payload.sessionId }
-                elseif ($payload.'thread-id') { $payload.'thread-id' }
-                else { $null }
+    payload   = if ($rawPayload) { $rawPayload.Trim() } else { $null }
+    sessionId = $sessionId
 }
-$body = $envelope | ConvertTo-Json -Depth 20 -Compress
+$body = $envelope | ConvertTo-Json -Compress
 
 # --- Fire-and-forget POST -------------------------------------------------
 try {
