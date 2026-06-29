@@ -127,22 +127,41 @@ function parsePayload(p: unknown): Record<string, unknown> | null {
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
+// Start everything inside the listen callback so we only spin up poller/panel
+// once the port is actually bound. This avoids the confusing case where the
+// poller starts, then listen fails (EADDRINUSE) and the whole process crashes.
+
+const poller = new CodexPoller(ingest, log);
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('');
+    console.error(`[FATAL] 端口 ${CONFIG.port} 已被占用。`);
+    console.error('        多半是另一个 UnionCodePet 守护进程已经在跑。');
+    console.error('        解决方法：');
+    console.error(`          1) 找到占用进程:  Get-NetTCPConnection -LocalPort ${CONFIG.port} -State Listen`);
+    console.error('          2) 结束它:        Stop-Process -Id <PID> -Force');
+    console.error('          3) 再重新运行 npm run dev');
+    process.exit(1);
+  }
+  console.error('[FATAL] server error:', err.message);
+  process.exit(1);
+});
 
 server.listen(CONFIG.port, CONFIG.host, () => {
   log(`UnionCodePet daemon listening on http://${CONFIG.host}:${CONFIG.port}`);
   log(`  POST /event   { source, kind?, payload?, sessionId? }`);
   log(`  GET  /health`);
+
+  // Start the console panel refresh loop.
+  panel.start(tracker, 1000);
+
+  // Start the Codex session poller (Windows: hooks disabled, this is the channel).
+  poller.start();
+
+  // Gentle GC so dead sessions don't pile up forever.
+  setInterval(() => tracker.gc(30 * 60 * 1000), 60 * 1000).unref();
 });
-
-// Start the console panel refresh loop.
-panel.start(tracker, 1000);
-
-// Start the Codex session poller (Windows: hooks disabled, this is the channel).
-const poller = new CodexPoller(ingest, log);
-poller.start();
-
-// Gentle GC so dead sessions don't pile up forever.
-setInterval(() => tracker.gc(30 * 60 * 1000), 60 * 1000).unref();
 
 // Clean shutdown.
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

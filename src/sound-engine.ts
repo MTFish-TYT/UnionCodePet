@@ -3,14 +3,10 @@
  *
  * Node has no built-in audio, so on Windows we shell out to PowerShell's
  * System.Media.SoundPlayer (the same API the user's existing play-sound.ps1
- * uses). It blocks until playback finishes, so we run it detached (no await) to
- * avoid stalling the event loop.
- *
- * The sound path comes from the central SOUND_MAP; this module only plays what
- * it's told. Non-Windows platforms log instead (placeholder for future Electron
- * Web Audio path).
+ * uses). The sound path comes from the central SOUND_MAP; this module only
+ * plays what it's told. Non-Windows platforms log instead.
  */
-import { spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { UnifiedEvent } from './protocol.js';
 import { SOUND_MAP } from './config.js';
@@ -32,20 +28,30 @@ export class SoundEngine {
       this.log(`[sound] missing file for ${key}: ${path}`);
       return false;
     }
+    this.log(`[sound] ▶ playing ${key} -> ${path}`);
     this.playWav(path);
     return true;
   }
 
-  /** Fire-and-forget wav playback via PowerShell SoundPlayer. */
+  /**
+   * Blocking wav playback via PowerShell SoundPlayer.
+   *
+   * Uses execFileSync (blocking) rather than spawn(detached) — the detached
+   * variant gets reaped before PlaySync finishes on Windows, leaving no audio.
+   * Blocking for ~1s is acceptable since sound only fires on state changes
+   * (task complete / permission), not on every event.
+   */
   private playWav(path: string): void {
-    const child = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
-        // -LiteralPath keeps Chinese characters in paths intact.
-        `(New-Object System.Media.SoundPlayer -LiteralPath '${path.replace(/'/g, "''")}').PlaySync()`],
-      { windowsHide: true, detached: true, stdio: 'ignore' },
-    );
-    child.on('error', (e) => this.log(`[sound] spawn failed: ${e.message}`));
-    child.unref();
+    const safe = path.replace(/'/g, "''");
+    const psScript = `$p=New-Object System.Media.SoundPlayer; $p.SoundLocation='${safe}'; $p.PlaySync()`;
+    try {
+      execFileSync(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psScript],
+        { windowsHide: true, stdio: 'ignore', timeout: 5000 },
+      );
+    } catch (e) {
+      this.log(`[sound] playback failed: ${(e as Error).message}`);
+    }
   }
 }
