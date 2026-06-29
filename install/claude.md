@@ -25,6 +25,14 @@ Copy-Item "C:\Users\<你>\.claude\settings.json" "C:\Users\<你>\.claude\setting
 
 把 `C:\Users\<你>\.claude\settings.json` 的 `hooks` 替换为下面这一段（注意：如果你的 `Notification` 已有配置，**用下面的整体替换 `hooks` 整块**——播放逻辑已统一交给守护进程，不再需要每条 hook 单独写 wav 路径）。
 
+> [!warning] 路径必须用正斜杠 `/`，不能用反斜杠
+> Claude Code 在解析 hook 的 `command` 字符串时会吞掉反斜杠，导致 `D:\AL\...` 变成 `D:AL...`，dispatcher.ps1 找不到，报错：
+> ```
+> Stop hook error: Failed with non-blocking status code: -File ... 不存在
+> ```
+> 下面所有 command 里的路径**已经用正斜杠**（`D:/AL/...`），照抄即可。Windows 下 PowerShell 和 cmd 都接受正斜杠，JSON 也不用转义，最稳妥。
+
+
 > 假设 UnionCodePet 在 `D:\AL\UnionCodePet`。把 `<你>` 换成你的用户名。
 
 ```json
@@ -35,7 +43,7 @@ Copy-Item "C:\Users\<你>\.claude\settings.json" "C:\Users\<你>\.claude\setting
       "hooks": [
         {
           "type": "command",
-          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\AL\\UnionCodePet\\hooks\\dispatcher.ps1 -Source claude -Kind Stop"
+          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:/AL/UnionCodePet/hooks/dispatcher.ps1 -Source claude -Kind Stop"
         }
       ]
     }
@@ -46,7 +54,7 @@ Copy-Item "C:\Users\<你>\.claude\settings.json" "C:\Users\<你>\.claude\setting
       "hooks": [
         {
           "type": "command",
-          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\AL\\UnionCodePet\\hooks\\dispatcher.ps1 -Source claude -Kind Notification"
+          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:/AL/UnionCodePet/hooks/dispatcher.ps1 -Source claude -Kind Notification"
         }
       ]
     },
@@ -55,7 +63,7 @@ Copy-Item "C:\Users\<你>\.claude\settings.json" "C:\Users\<你>\.claude\setting
       "hooks": [
         {
           "type": "command",
-          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\AL\\UnionCodePet\\hooks\\dispatcher.ps1 -Source claude -Kind Notification"
+          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:/AL/UnionCodePet/hooks/dispatcher.ps1 -Source claude -Kind Notification"
         }
       ]
     }
@@ -66,7 +74,7 @@ Copy-Item "C:\Users\<你>\.claude\settings.json" "C:\Users\<你>\.claude\setting
       "hooks": [
         {
           "type": "command",
-          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\AL\\UnionCodePet\\hooks\\dispatcher.ps1 -Source claude -Kind PreToolUse"
+          "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:/AL/UnionCodePet/hooks/dispatcher.ps1 -Source claude -Kind PreToolUse"
         }
       ]
     }
