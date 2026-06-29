@@ -26,25 +26,29 @@ export default function PetCanvas({
   const imgRef = useRef<HTMLImageElement | null>(null);
   const frameIdxRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  // Incremented each time a new atlas finishes loading. Using a counter instead
+  // of a boolean so that hot-swapping the pet (a second load) actually re-runs
+  // the animation effect — setImgLoaded(true) twice is a no-op and the loop
+  // would keep drawing the OLD image from its closure.
+  const [imgVersion, setImgVersion] = useState(0);
 
   const petState: PetState = phaseToPetState(status.phase);
   const row = ANIMATION_ROWS[petState];
 
-  // Load the atlas image once. Base64 data URL (main reads the webp, since the
-  // renderer's CSP blocks file://).
+  // Load the atlas image whenever the data URL changes (boot + pet swap).
   useEffect(() => {
     const img = new Image();
     img.src = spritesheetDataUrl;
     img.onload = () => {
       imgRef.current = img;
-      setImgLoaded(true);
+      setImgVersion((v) => v + 1);
     };
   }, [spritesheetDataUrl]);
 
   // Animation loop: draw current frame, schedule next per its duration.
+  // Re-runs when imgVersion changes (new pet loaded) or the animation row changes.
   useEffect(() => {
-    if (!imgLoaded) return;
+    if (imgVersion === 0) return;
     const canvas = canvasRef.current;
     const img = imgRef.current;
     if (!canvas || !img) return;
@@ -69,7 +73,7 @@ export default function PetCanvas({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [imgLoaded, row]);
+  }, [imgVersion, row]);
 
   // Bubble is always shown so the ☰ menu button is reachable at all times
   // (even when idle). The label falls back to "空闲" when there's nothing else.
