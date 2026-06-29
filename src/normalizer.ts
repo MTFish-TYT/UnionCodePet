@@ -108,15 +108,24 @@ export function normalizeClaude(
 interface ZcodeHookPayload {
   hookEventName?: string;
   toolName?: string;
-  tool_input?: unknown;
+  toolInput?: unknown;       // camelCase in real Zcode payload (not tool_input)
+  responsePreview?: string;  // agent's last reply, on Stop
+  reason?: string;           // why permission is requested, on PermissionRequest
+  riskLevel?: string;
+  mode?: string;             // "yolo" | "plan"
+  cwd?: string;
+  sessionId?: string;
   [k: string]: unknown;
 }
 
 /**
  * Zcode hooks use a fixed set of 7 event names; the ones we care about are
  * `PermissionRequest` and `Stop`. AskUserQuestion/ExitPlanMode arrive under
- * PermissionRequest and are distinguished by toolName (matches the user's
- * existing notify-sound plugin logic).
+ * PermissionRequest and are distinguished by toolName.
+ *
+ * Real payload fields (verified from a dump):
+ *  - Stop:            responsePreview (agent's last reply — great summary text)
+ *  - PermissionRequest: toolName, reason, toolInput (question text / plan text)
  */
 export function normalizeZcode(
   raw: ZcodeHookPayload | null,
@@ -126,18 +135,38 @@ export function normalizeZcode(
   const hookEvent = raw?.hookEventName ?? '';
   const tool = raw?.toolName;
   const cwd = typeof raw?.cwd === 'string' ? raw.cwd : undefined;
-  const base = { source: 'zcode' as const, sessionId, ts };
+  const sid = raw?.sessionId ?? sessionId;
+  const base = { source: 'zcode' as const, sessionId: sid, ts };
 
   switch (hookEvent) {
-    case 'Stop':
-      return { ...base, event: 'task_complete', summary: '任务完成', cwd };
+    case 'Stop': {
+      // responsePreview is the agent's final reply — use it as the summary.
+      const preview = typeof raw?.responsePreview === 'string' ? raw.responsePreview : '';
+      return {
+        ...base,
+        event: 'task_complete',
+        summary: summarize(preview) || '任务完成',
+        cwd,
+      };
+    }
     case 'PermissionRequest':
       if (tool === 'ExitPlanMode') {
+        const planText = extractZcodePlanText(raw?.toolInput);
         return {
           ...base,
           event: 'plan_started',
           toolName: tool,
-          summary: '退出计划模式，开始执行',
+          summary: planText ? summarize(planText) : '退出计划模式，开始执行',
+          cwd,
+        };
+      }
+      if (tool === 'AskUserQuestion') {
+        const question = extractZcodeQuestion(raw?.toolInput);
+        return {
+          ...base,
+          event: 'permission_request',
+          toolName: tool,
+          summary: question ? summarize(question) : '提问',
           cwd,
         };
       }
@@ -145,12 +174,31 @@ export function normalizeZcode(
         ...base,
         event: 'permission_request',
         toolName: tool,
-        summary: tool === 'AskUserQuestion' ? '提问' : '需要确认',
+        summary: summarize(raw?.reason) || '需要确认',
         cwd,
       };
     default:
       return null;
   }
+}
+
+/** Pull the first question text out of a Zcode AskUserQuestion toolInput. */
+function extractZcodeQuestion(toolInput: unknown): string {
+  if (!toolInput || typeof toolInput !== 'object') return '';
+  const questions = (toolInput as Record<string, unknown>).questions;
+  if (!Array.isArray(questions) || questions.length === 0) return '';
+  const q0 = questions[0];
+  if (q0 && typeof q0 === 'object' && 'question' in q0) {
+    return String((q0 as Record<string, unknown>).question);
+  }
+  return '';
+}
+
+/** Pull the plan text out of a Zcode ExitPlanMode toolInput. */
+function extractZcodePlanText(toolInput: unknown): string {
+  if (!toolInput || typeof toolInput !== 'object') return '';
+  const plan = (toolInput as Record<string, unknown>).plan;
+  return typeof plan === 'string' ? plan : '';
 }
 
 // ---------------------------------------------------------------------------

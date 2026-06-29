@@ -118,7 +118,33 @@ function parsePayload(p: unknown): Record<string, unknown> | null {
     try {
       return JSON.parse(p);
     } catch {
-      return null;
+      // Fallback 1: strip literal control chars and retry (PowerShell's
+      // ConvertTo-Json sometimes emits unescaped \n inside string values).
+      try {
+        const cleaned = p.replace(/[\x00-\x1F]/g, (m) => m === '\n' ? '\\n' : m === '\t' ? '\\t' : '');
+        return JSON.parse(cleaned);
+      } catch {
+        // Fall through to regex extraction.
+      }
+      // Fallback 2: regex extraction. Zcode's hook runs under chcp 936 (GBK),
+      // and Chinese text in responsePreview/toolInput arrives as corrupted bytes
+      // that break JSON.parse. But the fields we actually need for state
+      // (hookEventName, toolName, sessionId, cwd) are ASCII, so we mine them
+      // with regex — mirroring the user's original play-sound.ps1 approach.
+      const obj: Record<string, unknown> = {};
+      const m = (re: RegExp): string | undefined => {
+        const r = p.match(re);
+        return r ? r[1] : undefined;
+      };
+      const he = m(/"hookEventName"\s*:\s*"([^"]*)"/);
+      if (he) obj.hookEventName = he;
+      const tn = m(/"toolName"\s*:\s*"([^"]*)"/);
+      if (tn) obj.toolName = tn;
+      const sid = m(/"sessionId"\s*:\s*"([^"]*)"/);
+      if (sid) obj.sessionId = sid;
+      const cwd = m(/"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      if (cwd) obj.cwd = cwd.replace(/\\\\/g, '\\');
+      return Object.keys(obj).length ? obj : null;
     }
   }
   return p as Record<string, unknown>;
