@@ -54,11 +54,22 @@ export function normalizeClaude(
         cwd,
       };
     case 'Notification': {
-      // permission_prompt = needs approval; idle_prompt = waiting for input.
+      // permission_prompt = needs approval (incl. plan approval); idle_prompt =
+      // waiting for input. NOTE: ExitPlanMode does NOT arrive here — it comes as
+      // a PermissionRequest event (verified from a real Claude event dump).
       const ntype = raw?.notification_type ?? '';
-      const tool = raw?.toolName;
-      // ExitPlanMode fires a Notification (it needs the user to confirm exiting
-      // plan mode) — treat that as plan_started, not a generic permission.
+      return {
+        ...base,
+        event: 'permission_request',
+        summary: ntype === 'idle_prompt' ? '等待输入' : '需要确认',
+        cwd,
+      };
+    }
+    case 'PermissionRequest': {
+      // Claude Code's dedicated permission event. ExitPlanMode arrives here
+      // (tool_name=ExitPlanMode) and means "leaving plan mode, start executing"
+      // — map it to plan_started so it plays the plan sound, not permission.
+      const tool = raw?.toolName ?? raw?.tool_name;
       if (tool === 'ExitPlanMode') {
         return {
           ...base,
@@ -68,18 +79,6 @@ export function normalizeClaude(
           cwd,
         };
       }
-      return {
-        ...base,
-        event: 'permission_request',
-        toolName: tool,
-        summary: ntype === 'idle_prompt' ? '等待输入' : '需要确认',
-        cwd,
-      };
-    }
-    case 'PermissionRequest': {
-      // Claude Code's dedicated permission event (tool needs approval).
-      // Payload has tool_name (snake_case) + tool_input.
-      const tool = raw?.toolName ?? raw?.tool_name;
       return {
         ...base,
         event: 'permission_request',
