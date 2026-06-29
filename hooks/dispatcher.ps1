@@ -101,16 +101,23 @@ if ($rawPayload -match '"sessionId"\s*:\s*"([^"]*)"') { $sessionId = $Matches[1]
 elseif ($rawPayload -match '"thread-id"\s*:\s*"([^"]*)"') { $sessionId = $Matches[1] }
 
 # --- Build the envelope ---------------------------------------------------
-# Send payload as a STRING (the raw JSON text), NOT a nested object. Two reasons:
-#  1) Hand-concatenating JSON in PowerShell mangles embedded quotes (the payload
-#     quotes get eaten), producing invalid JSON that the daemon rejects with 400.
-#  2) ConvertTo-Json of a nested PSCustomObject corrupts the shape on some builds.
-# A flat hashtable where `payload` is a plain string serializes reliably, and the
-# daemon's parsePayload() already handles string-form JSON (it JSON.parses again).
+# Send payload as a STRING (the raw JSON text), NOT a nested object. Hand-
+# concatenating JSON mangles embedded quotes; a flat hashtable where `payload`
+# is a plain string serializes reliably (daemon's parsePayload re-JSON.parses).
+#
+# Truncate oversized payloads: Zcode's Stop event includes the FULL agent reply
+# in responsePreview; under GBK that balloons the body and the POST times out
+# before it finishes sending. The daemon only shows a short summary anyway, so
+# cap well below the point where transfer becomes slow.
+if ($rawPayload -and $rawPayload.Length -gt 2000) {
+    $rawPayload = $rawPayload.Substring(0, 2000)
+}
+if ($rawPayload) { $rawPayload = $rawPayload.Trim() }
+
 $envelope = [ordered]@{
     source    = $Source
     kind      = $Kind
-    payload   = if ($rawPayload) { $rawPayload.Trim() } else { $null }
+    payload   = if ($rawPayload) { $rawPayload } else { $null }
     sessionId = $sessionId
 }
 $body = $envelope | ConvertTo-Json -Compress
@@ -120,8 +127,8 @@ try {
     $req = [System.Net.HttpWebRequest]::Create($DaemonUrl)
     $req.Method = 'POST'
     $req.ContentType = 'application/json; charset=utf-8'
-    $req.Timeout = 1500        # ms — never block the CLI
-    $req.ReadWriteTimeout = 1500
+    $req.Timeout = 5000        # ms — was 1500, too short for big Zcode payloads
+    $req.ReadWriteTimeout = 5000
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
     $req.ContentLength = $bytes.Length
     $stream = $req.GetRequestStream()
