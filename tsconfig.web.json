@@ -25,8 +25,11 @@
     "renderer/src/**/*.tsx",
     "renderer/pet/**/*.ts",
     "renderer/pet/**/*.tsx",
+    "renderer/timer/**/*.ts",
+    "renderer/timer/**/*.tsx",
     "src/protocol.ts",
-    "src/config.ts"
+    "src/config.ts",
+    "src/pomodoro.ts"
   ],
   "exclude": ["node_modules", "out", "dist", "dist-legacy", "electron"]
 }

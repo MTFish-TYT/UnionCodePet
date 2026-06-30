@@ -1,6 +1,7 @@
 // Renderer-side wrapper around the preload bridge (`window.ucp`).
 // Provides typed access so components don't touch the global directly.
 import type { RuntimeConfig } from '@shared/config';
+import type { PomodoroSnapshot } from '@shared/pomodoro';
 
 export interface UcpApi {
   getConfig: () => Promise<RuntimeConfig>;
@@ -11,6 +12,11 @@ export interface UcpApi {
   validateSounds: () => Promise<string[]>;
   onSessionsUpdate: (cb: (sessions: SessionSnapshot[]) => void) => () => void;
   listPets: () => Promise<Array<{ id: string; displayName: string }>>;
+  // Pomodoro timer control + live snapshot stream.
+  getPomodoroSnapshot: () => Promise<PomodoroSnapshot>;
+  onPomodoroSnapshot: (cb: (snapshot: PomodoroSnapshot) => void) => () => void;
+  pomodoroControl: (action: 'start' | 'pause' | 'resume' | 'reset' | 'skip') => Promise<PomodoroSnapshot>;
+  applyPomodoroPreset: (id: string) => Promise<boolean>;
 }
 
 // Session shape pushed from main (mirrors src/session-state SessionState, but

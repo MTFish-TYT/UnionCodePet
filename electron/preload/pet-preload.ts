@@ -24,6 +24,19 @@ const api = {
     ipcRenderer.on('sessions:update', handler);
     return () => ipcRenderer.removeListener('sessions:update', handler);
   },
+  // Live pomodoro phase (focusing / short-break / long-break / idle) so the pet
+  // animation can reflect the timer even when no CLI session is active.
+  onPomodoroPhase: (cb: (phase: string) => void) => {
+    const handler = (_e: unknown, phase: string) => cb(phase);
+    ipcRenderer.on('pomodoro:phase', handler);
+    return () => ipcRenderer.removeListener('pomodoro:phase', handler);
+  },
+  // One-shot reaction when a pomodoro phase ends: 'cheer' (focus done) | 'wave'.
+  onPetReaction: (cb: (reaction: string) => void) => {
+    const handler = (_e: unknown, reaction: string) => cb(reaction);
+    ipcRenderer.on('pet:reaction', handler);
+    return () => ipcRenderer.removeListener('pet:reaction', handler);
+  },
   // Context-menu actions the renderer can request back to main.
   toggleClickThrough: () => ipcRenderer.send('pet:toggle-clickthrough'),
   hidePet: () => ipcRenderer.send('pet:hide'),

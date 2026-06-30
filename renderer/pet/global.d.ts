@@ -19,6 +19,8 @@ export interface HistoryEntry {
 export interface PetApi {
   onPetReady: (cb: (info: PetInfo) => void) => () => void;
   onSessionsUpdate: (cb: (sessions: unknown[]) => void) => () => void;
+  onPomodoroPhase: (cb: (phase: string) => void) => () => void;
+  onPetReaction: (cb: (reaction: string) => void) => () => void;
   getSessions: () => Promise<unknown[]>;
   getHistory: () => Promise<HistoryEntry[]>;
   toggleClickThrough: () => void;

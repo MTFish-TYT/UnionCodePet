@@ -7,14 +7,16 @@ import SoundMapEditor from './components/SoundMapEditor';
 import GeneralSettings from './components/GeneralSettings';
 import SessionPanel from './components/SessionPanel';
 import PetSettings from './components/PetSettings';
+import PomodoroPanel from './components/PomodoroPanel';
 
-type Page = 'sound' | 'general' | 'sessions' | 'pet';
+type Page = 'sound' | 'general' | 'sessions' | 'pet' | 'pomodoro';
 
 const NAV: Array<{ id: Page; icon: string; label: string }> = [
   { id: 'sound', icon: '🔊', label: '音效' },
   { id: 'general', icon: '⚙️', label: '通用' },
   { id: 'sessions', icon: '📊', label: '会话' },
   { id: 'pet', icon: '🐾', label: '桌宠' },
+  { id: 'pomodoro', icon: '🍅', label: '番茄钟' },
 ];
 
 export default function App() {
@@ -106,6 +108,7 @@ export default function App() {
         {page === 'general' && <GeneralSettings config={config} onSave={handleSave} />}
         {page === 'sessions' && <SessionPanel sessions={sessions} />}
         {page === 'pet' && <PetSettings config={config} onSave={handleSave} />}
+        {page === 'pomodoro' && <PomodoroPanel config={config} onSave={handleSave} />}
       </main>
     </div>
   );

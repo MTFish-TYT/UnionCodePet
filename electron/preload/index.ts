@@ -26,6 +26,16 @@ const api = {
 
   // pets — enumerate available pets for the selection dropdown.
   listPets: () => ipcRenderer.invoke('pets:list'),
+
+  // pomodoro — live snapshot stream + control actions.
+  getPomodoroSnapshot: () => ipcRenderer.invoke('pomodoro:get-snapshot'),
+  onPomodoroSnapshot: (cb: (snapshot: unknown) => void) => {
+    const handler = (_e: unknown, snapshot: unknown) => cb(snapshot);
+    ipcRenderer.on('pomodoro:snapshot', handler);
+    return () => ipcRenderer.removeListener('pomodoro:snapshot', handler);
+  },
+  pomodoroControl: (action: string) => ipcRenderer.invoke('pomodoro:control', action),
+  applyPomodoroPreset: (id: string) => ipcRenderer.invoke('pomodoro:apply-preset', id),
 };
 
 export type UcpApi = typeof api;

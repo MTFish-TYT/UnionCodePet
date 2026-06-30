@@ -97,3 +97,65 @@ export function aggregateStatus(sessions: SessionLike[], now = Date.now()): PetS
 
   return { phase: 'idle', label: '' };
 }
+
+// ---------------------------------------------------------------------------
+// Pomodoro integration (independent second source, layered on top of CLI state)
+// ---------------------------------------------------------------------------
+
+export type PomodoroPhase = 'idle' | 'focusing' | 'short-break' | 'long-break';
+
+/** A pomodoro status slice the pet cares about (phase + live countdown). */
+export interface PomodoroPetStatus {
+  phase: PomodoroPhase;
+  /** Remaining ms in the current phase (for the bubble countdown). */
+  remainingMs: number;
+  /** Current focus round within the set (1..cyclesPerSet). */
+  focusCountInSet: number;
+  cyclesPerSet: number;
+}
+
+/**
+ * Short bubble text for the pomodoro phase, e.g. "🍅 专注".
+ *
+ * Only the MODE is shown — neither the countdown nor the round counter (1/4)
+ * is included, because the pet window only receives phase *changes* (not the
+ * 500ms ticks / per-round updates that drive the timer window). A stale time
+ * or round would freeze and look broken. Live progress lives in the timer
+ * overlay; the bubble just says what mode the pet is in.
+ */
+export function pomodoroBubbleText(p: PomodoroPetStatus): string {
+  if (p.phase === 'idle') return '';
+  const phaseName = p.phase === 'focusing' ? '专注' : p.phase === 'long-break' ? '长休息' : '短休息';
+  return `🍅 ${phaseName}`;
+}
+
+/**
+ * Decide the pet animation when the pomodoro timer is the active driver
+ * (i.e. no higher-priority CLI phase is showing). Focusing → running,
+ * breaks → review (a calm "thinking" pose).
+ */
+export function pomodoroPhaseToPetState(phase: PomodoroPhase): PetState | null {
+  switch (phase) {
+    case 'focusing': return 'running';
+    case 'short-break':
+    case 'long-break': return 'review';
+    case 'idle':
+    default: return null;
+  }
+}
+
+/**
+ * Merge a CLI pet status with a pomodoro status into the final PetStatus the
+ * canvas renders. The CLI phase drives the animation (waiting/error/working
+ * always win); pomodoro only contributes its bubble text (prepended when the
+ * timer is running). The pomodoro→animation override is handled in PetCanvas
+ * via `pomodoroOverride`, kept separate so the layering is explicit.
+ */
+export function mergeWithPomodoro(cli: PetStatus, pomo: PomodoroPetStatus | null): PetStatus {
+  if (!pomo || pomo.phase === 'idle') return cli;
+  const pomoText = pomodoroBubbleText(pomo);
+  const cliActive = cli.phase === 'waiting' || cli.phase === 'error' || cli.phase === 'working';
+  // Bubble: pomodoro text first, then CLI detail if the CLI is also active.
+  const label = cli.label && cliActive ? `${pomoText} · ${cli.label}` : (cli.label || pomoText);
+  return { phase: cli.phase, label };
+}

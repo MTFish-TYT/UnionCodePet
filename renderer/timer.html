@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>UnionCodePet Timer</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+        font-family: 'Cascadia Code', 'Consolas', 'Segoe UI', monospace;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .timer-root {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 14px 18px 10px;
+        border-radius: 14px;
+        /* Dark translucent backdrop so the countdown stays readable on light
+           wallpapers. Window itself is transparent; only this card is filled. */
+        background: rgba(22, 22, 30, 0.55);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        /* Drag the window by the whole card except the control buttons. */
+        -webkit-app-region: drag;
+      }
+      .timer-phase {
+        font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+        opacity: 0.9;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+      }
+      .timer-time {
+        font-size: 44px;
+        font-weight: 700;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      }
+      /* Progress bar sits under the digits. */
+      .timer-progress-track {
+        width: 100%;
+        height: 3px;
+        margin-top: 8px;
+        background: rgba(255, 255, 255, 0.25);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .timer-progress-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.45s linear;
+      }
+      .timer-controls {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+        -webkit-app-region: no-drag;
+      }
+      .timer-btn {
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        opacity: 0.75;
+        transition: opacity 0.12s, transform 0.12s;
+        font-family: -apple-system, 'Segoe UI', sans-serif;
+      }
+      .timer-btn:hover {
+        opacity: 1;
+        transform: scale(1.1);
+      }
+      .timer-close {
+        background: transparent;
+      }
+      /* Phase color themes (applied to time + progress + phase label). */
+      .phase-idle { color: #c0caf5; }
+      .phase-focusing { color: #f7768e; }
+      .phase-short-break { color: #9ece6a; }
+      .phase-long-break { color: #7aa2f7; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./timer/main.tsx"></script>
+  </body>
+</html>

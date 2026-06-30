@@ -13,12 +13,16 @@ import { BrowserWindow, Menu, shell, app, screen, ipcMain } from 'electron';
 import { join, dirname } from 'node:path';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import type { PomodoroPhase } from '../../src/pomodoro.js';
 
 let petWindow: BrowserWindow | null = null;
 let clickThrough = false;
 // Latest session list, updated by broadcastSessionsToPet; read when the menu
 // pops so it shows which CLIs are active and their current state.
 let latestSessions: Array<{ source: string; sessionId: string; phase: string; lastSummary?: string; lastToolName?: string }> = [];
+// Latest pomodoro phase, pushed to the pet so its animation/bubble can reflect
+// the timer even when no CLI is active.
+let latestPomodoroPhase: PomodoroPhase = 'idle';
 
 interface PetInfo {
   id: string;
@@ -146,6 +150,25 @@ export function broadcastSessionsToPet(sessions: unknown[]): void {
   latestSessions = sessions as typeof latestSessions;
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('sessions:update', sessions);
+  }
+}
+
+/** Push the current pomodoro phase to the pet (independent of CLI sessions). */
+export function broadcastPomodoroPhaseToPet(phase: PomodoroPhase): void {
+  latestPomodoroPhase = phase;
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send('pomodoro:phase', phase);
+  }
+}
+
+/**
+ * Push a one-shot pet reaction when a pomodoro phase ends:
+ *  - 'cheer' (focus done) → pet jumps once
+ *  - 'wave'  (break done) → pet waves once
+ */
+export function broadcastPetReaction(reaction: 'cheer' | 'wave' | 'none'): void {
+  if (petWindow && !petWindow.isDestroyed() && reaction !== 'none') {
+    petWindow.webContents.send('pet:reaction', reaction);
   }
 }
 

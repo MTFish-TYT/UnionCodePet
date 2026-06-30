@@ -17,10 +17,16 @@ import type { HistoryEntry } from './global';
 export default function PetCanvas({
   spritesheetDataUrl,
   status,
+  pomodoroOverride,
+  reaction,
   onDoubleClick,
 }: {
   spritesheetDataUrl: string;
   status: PetStatus;
+  /** Animation state to use when the CLI is idle (pomodoro focusing→running). */
+  pomodoroOverride?: PetState | null;
+  /** One-shot reaction token: bumping `n` plays cheer/wave once. */
+  reaction?: { kind: 'cheer' | 'wave'; n: number } | null;
   onDoubleClick: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,19 +41,31 @@ export default function PetCanvas({
 
   // The pet's "real" state from status. When idle, we spice things up by
   // occasionally playing a random idle-buster animation (waving/jumping/review)
-  // so the pet feels alive instead of just breathing forever.
-  const baseState: PetState = phaseToPetState(status.phase);
+  // so the pet feels alive instead of just breathing forever. The pomodoro
+  // timer can override the idle pose (e.g. show 'running' while focusing).
+  const cliState: PetState = phaseToPetState(status.phase);
+  const baseState: PetState = cliState === 'idle' ? (pomodoroOverride ?? 'idle') : cliState;
   const [activeState, setActiveState] = useState<PetState>('idle');
   const idleLoopsRef = useRef(0); // idle loops counted before maybe doing a buster
   const busterLoopsRef = useRef(0); // loops of the current buster played
+  const lastReactionNRef = useRef(0);
 
-  // Whenever the status phase changes, sync the active state (non-idle states
+  // Whenever the base state changes, sync the active state (non-idle states
   // always follow status; idle resets the idle-loop counter).
   useEffect(() => {
     setActiveState(baseState);
     idleLoopsRef.current = 0;
     busterLoopsRef.current = 0;
   }, [baseState]);
+
+  // One-shot reaction from the pomodoro engine: focus-end → cheer (jumping),
+  // break-end → wave (waving). Plays one loop then returns to the base state.
+  useEffect(() => {
+    if (!reaction || reaction.n === lastReactionNRef.current) return;
+    lastReactionNRef.current = reaction.n;
+    setActiveState(reaction.kind === 'cheer' ? 'jumping' : 'waving');
+    busterLoopsRef.current = 0;
+  }, [reaction]);
 
   const row = ANIMATION_ROWS[activeState];
 
@@ -91,24 +109,24 @@ export default function PetCanvas({
 
       // End of a full loop: decide whether to keep looping or switch state.
       if (next === 0) {
-        // Only do idle antics when the real status is idle.
-        if (baseState === 'idle') {
-          if (activeState === 'idle') {
-            idleLoopsRef.current += 1;
-            // After a few idle loops, ~25% chance to play a buster animation.
-            if (idleLoopsRef.current >= 2 && Math.random() < 0.25) {
-              setActiveState(pickBuster());
-              busterLoopsRef.current = 0;
-              return; // this effect's cleanup will restart with the new row
-            }
-          } else {
-            // Currently playing a buster — play 1-2 loops then return to idle.
-            busterLoopsRef.current += 1;
-            if (busterLoopsRef.current >= 2) {
-              setActiveState('idle');
-              idleLoopsRef.current = 0;
-              return;
-            }
+        // If we're playing a transient animation that isn't the base state
+        // (an idle buster OR a pomodoro reaction), return to base after a
+        // couple of loops. This handles both idle→buster→idle and
+        // running→jumping(reaction)→running uniformly.
+        if (activeState !== baseState) {
+          busterLoopsRef.current += 1;
+          if (busterLoopsRef.current >= 2) {
+            setActiveState(baseState);
+            idleLoopsRef.current = 0;
+            return; // effect cleanup restarts with the base row
+          }
+        } else if (baseState === 'idle') {
+          // Truly idle: occasionally play a random buster for liveliness.
+          idleLoopsRef.current += 1;
+          if (idleLoopsRef.current >= 2 && Math.random() < 0.25) {
+            setActiveState(pickBuster());
+            busterLoopsRef.current = 0;
+            return;
           }
         }
       }

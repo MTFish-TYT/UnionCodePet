@@ -12,7 +12,9 @@ import { loadConfig } from '../../src/config.js';
 import { CodexPoller } from '../../src/codex-poller.js';
 import { startHttpServer } from './http-server.js';
 import { registerIpc } from './ipc-handlers.js';
-import { createPetWindow, broadcastSessionsToPet, registerPetIpc, reloadPet, listPets } from './pet-window.js';
+import { createPetWindow, broadcastSessionsToPet, registerPetIpc, reloadPet, listPets, broadcastPetReaction, broadcastPomodoroPhaseToPet } from './pet-window.js';
+import { createPomodoroHost } from './pomodoro-engine.js';
+import { createTimerWindow, broadcastSnapshotToTimer, showTimerWindow } from './timer-window.js';
 
 // Project root (where pets/ and build/ live).
 // Dev: out/main → two levels up is the project root.
@@ -95,6 +97,7 @@ function createTray(): void {
   const menu = Menu.buildFromTemplate([
     { label: '显示配置', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
     { label: '显示桌宠', click: () => showPetWindow() },
+    { label: '显示番茄钟', click: () => showTimerWindow() },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() },
   ]);
@@ -147,9 +150,37 @@ app.whenReady().then(() => {
   registerIpc((cfg) => reloadPet(PROJECT_ROOT, cfg.activePet || undefined));
   ipcMain.handle('pets:list', () => listPets(PROJECT_ROOT));
 
+  // 4b. Pomodoro engine (main-process resident timer). The tick loop keeps
+  // running even when the config window is hidden — only the tray/pet/timer
+  // windows keep the app alive. IPC channels let both windows control it.
+  const pomodoro = createPomodoroHost();
+  registerPomodoroIpc(pomodoro);
+  pomodoro.startTicking();
+
   // 5. Config window + pet window (with the configured active pet).
   createWindow();
   createPetWindow(PROJECT_ROOT, loadConfig().activePet || undefined);
+
+  // 5b. Timer overlay window + wire the engine's snapshot stream into it.
+  createTimerWindow();
+  let lastPhase = 'idle';
+  pomodoro.onSnapshot((snap) => {
+    broadcastSnapshotToTimer(snap);
+    // Push phase changes to the pet window so its animation can reflect the
+    // timer (e.g. show 'running' while focusing). We diff on phase to avoid
+    // spamming the pet with every 500ms tick.
+    if (snap.phase !== lastPhase) {
+      lastPhase = snap.phase;
+      broadcastPomodoroPhaseToPet(snap.phase);
+    }
+    // Also push to the config window so the pomodoro page stays live.
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('pomodoro:snapshot', snap);
+    }
+  });
+  // When a pomodoro phase ends, tell the pet to react (cheer on focus done,
+  // wave on break done). The pet renderer plays a one-off animation.
+  pomodoro.onPetReaction((reaction) => broadcastPetReaction(reaction));
 
   // 6. System tray — keeps the app resident after the config window is closed.
   //    Double-click the tray icon to reopen config; right-click for the menu.
@@ -163,6 +194,7 @@ app.whenReady().then(() => {
   // real close instead of hiding.
   app.on('before-quit', () => {
     isQuitting = true;
+    pomodoro.stopTicking();
     poller?.stop();
     server.close();
   });
@@ -173,3 +205,43 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   // Do nothing — don't quit. The tray menu's "退出" is the only exit.
 });
+
+/**
+ * Register the pomodoro IPC channels used by both the timer window and the
+ * config UI. Control actions return the fresh snapshot so callers can update
+ * immediately without waiting for the next broadcast tick.
+ */
+function registerPomodoroIpc(pomodoro: ReturnType<typeof createPomodoroHost>): void {
+  const { engine } = pomodoro;
+
+  ipcMain.handle('pomodoro:get-snapshot', () => engine.snapshot(Date.now()));
+
+  ipcMain.handle('pomodoro:control', (_e, action: string) => {
+    const now = Date.now();
+    switch (action) {
+      case 'start':
+        engine.start(now);
+        break;
+      case 'pause':
+        engine.pause(now);
+        break;
+      case 'resume':
+        engine.resume(now);
+        break;
+      case 'reset':
+        engine.reset();
+        break;
+      case 'skip':
+        engine.skip(now);
+        break;
+      default:
+        break;
+    }
+    pomodoro.broadcast();
+    return engine.snapshot(now);
+  });
+
+  ipcMain.handle('pomodoro:apply-preset', (_e, id: string) => {
+    return pomodoro.applyPresetById(id);
+  });
+}

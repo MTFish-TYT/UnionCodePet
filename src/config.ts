@@ -43,6 +43,48 @@ export interface RuntimeConfig {
   soundMap: Partial<Record<SoundKey, string | null>>;
   /** Active pet id (matches a pet's `id` in pets/<id>/pet.json). '' = first found. */
   activePet: string;
+  /** Pomodoro timer settings (presets + active config + reminder sounds). */
+  pomodoro: PomodoroConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Pomodoro (番茄钟)
+// ---------------------------------------------------------------------------
+
+/**
+ * A pomodoro preset — the 4 knobs the user asked for:
+ *   focus time, short break, how many rounds per set, long break between sets.
+ */
+export interface PomodoroPreset {
+  /** Stable id ('classic-25' for builtins, or user-supplied name slug). */
+  id: string;
+  /** Display name, e.g. '经典 25/5'. */
+  name: string;
+  /** Focus duration per round, in minutes. */
+  focusMin: number;
+  /** Short break between rounds, in minutes. */
+  shortBreakMin: number;
+  /** How many focus rounds make one set (long break comes after each set). */
+  cyclesPerSet: number;
+  /** Long break between sets, in minutes. */
+  longBreakMin: number;
+  /** Built-in presets can't be deleted by the UI. */
+  builtin?: boolean;
+}
+
+export interface PomodoroConfig {
+  /** Whether the pomodoro feature is enabled (shows the timer window entry). */
+  enabled: boolean;
+  /** Id of the currently active preset (drives the running timer). */
+  activePresetId: string;
+  /** Built-in + user presets. */
+  presets: PomodoroPreset[];
+  /** Auto-start the next phase when the current one ends (专注↔休息 循环). */
+  autoStart: boolean;
+  /** Sound file to play when a focus phase ends (null = silent). */
+  soundOnFocusEnd: string | null;
+  /** Sound file to play when a break phase ends (null = silent). */
+  soundOnBreakEnd: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +116,27 @@ const DEFAULT_SOUND_MAP: Partial<Record<SoundKey, string | null>> = {
   'codex:message': null,
 };
 
+/**
+ * Built-in pomodoro presets (classic schemes). Users can't delete these but can
+ * add their own via the config UI.
+ */
+export const BUILTIN_PRESETS: PomodoroPreset[] = [
+  { id: 'classic-25', name: '经典 25/5', focusMin: 25, shortBreakMin: 5, cyclesPerSet: 4, longBreakMin: 15, builtin: true },
+  { id: 'preset-52-17', name: '52/17 高效', focusMin: 52, shortBreakMin: 17, cyclesPerSet: 1, longBreakMin: 17, builtin: true },
+  { id: 'preset-90-20', name: '90/20 深度', focusMin: 90, shortBreakMin: 20, cyclesPerSet: 2, longBreakMin: 30, builtin: true },
+];
+
+function defaultPomodoro(): PomodoroConfig {
+  return {
+    enabled: true,
+    activePresetId: BUILTIN_PRESETS[0].id,
+    presets: BUILTIN_PRESETS.map((p) => ({ ...p })),
+    autoStart: true,
+    soundOnFocusEnd: null,
+    soundOnBreakEnd: null,
+  };
+}
+
 function defaultConfig(): RuntimeConfig {
   return {
     version: 1,
@@ -81,6 +144,7 @@ function defaultConfig(): RuntimeConfig {
     rateLimitsMs: { ...DEFAULT_RATE_LIMITS },
     soundMap: { ...DEFAULT_SOUND_MAP },
     activePet: '', // '' = use the first pet found in pets/
+    pomodoro: defaultPomodoro(),
   };
 }
 
@@ -97,6 +161,12 @@ export const CONFIG: DaemonConfig = {
 
 /** Sound map. Mutated by applyConfig(). `null` = tracked but silent. */
 export const SOUND_MAP: Partial<Record<SoundKey, string | null>> = { ...DEFAULT_SOUND_MAP };
+
+/**
+ * Pomodoro runtime config. Mutated by applyConfig() so the engine picks up
+ * preset/sound changes without a restart (mirrors the CONFIG/SOUND_MAP pattern).
+ */
+export const POMODORO: PomodoroConfig = defaultPomodoro();
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -153,6 +223,8 @@ export function applyConfig(cfg: RuntimeConfig): void {
   // Replace SOUND_MAP contents in place (other modules hold the reference).
   for (const k of Object.keys(SOUND_MAP)) delete (SOUND_MAP as Record<string, unknown>)[k];
   Object.assign(SOUND_MAP, cfg.soundMap);
+  // Hot-reload pomodoro settings (presets/sounds) into the runtime instance.
+  Object.assign(POMODORO, cfg.pomodoro);
 }
 
 /** Reset to defaults, persist, and apply. */
@@ -175,6 +247,29 @@ function mergeWithDefaults(parsed: Partial<RuntimeConfig>): RuntimeConfig {
     rateLimitsMs: { ...def.rateLimitsMs, ...(parsed.rateLimitsMs ?? {}) },
     soundMap: { ...def.soundMap, ...(parsed.soundMap ?? {}) },
     activePet: parsed.activePet ?? def.activePet,
+    pomodoro: mergePomodoro(parsed.pomodoro),
+  };
+}
+
+/**
+ * Merge a (possibly old/missing) pomodoro config. Ensures builtin presets are
+ * always present (a newer builtin may have been added since the user's file was
+ * written) while preserving the user's custom presets + active selection.
+ */
+function mergePomodoro(parsed: Partial<PomodoroConfig> | undefined): PomodoroConfig {
+  const def = defaultPomodoro();
+  if (!parsed) return def;
+  // Keep builtins authoritative (re-seed any missing builtins) but carry over
+  // user-added presets that aren't builtins.
+  const userCustom = (parsed.presets ?? []).filter((p) => !p.builtin);
+  const presets = [...BUILTIN_PRESETS.map((b) => ({ ...b })), ...userCustom];
+  return {
+    enabled: parsed.enabled ?? def.enabled,
+    activePresetId: parsed.activePresetId ?? def.activePresetId,
+    presets,
+    autoStart: parsed.autoStart ?? def.autoStart,
+    soundOnFocusEnd: parsed.soundOnFocusEnd ?? null,
+    soundOnBreakEnd: parsed.soundOnBreakEnd ?? null,
   };
 }
 
